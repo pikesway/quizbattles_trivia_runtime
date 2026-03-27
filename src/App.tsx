@@ -1,32 +1,45 @@
 import { useState, useEffect } from 'react';
 import { TriviaGame } from './components/TriviaGame';
+import { TestQuiz } from './components/TestQuiz';
 import { Admin } from './components/admin/Admin';
 import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/admin/ProtectedRoute';
 
+type ViewType = 'player' | 'admin' | 'test';
+
+function getInitialView(): { view: ViewType; testToken?: string } {
+  const path = window.location.pathname;
+  if (path.startsWith('/admin')) return { view: 'admin' };
+  if (path.startsWith('/test/')) {
+    const token = path.split('/test/')[1];
+    return { view: 'test', testToken: token };
+  }
+  return { view: 'player' };
+}
+
 function App() {
-  const [view, setView] = useState<'player' | 'admin'>(() => {
-    const path = window.location.pathname;
-    return path.startsWith('/admin') ? 'admin' : 'player';
-  });
+  const [viewState, setViewState] = useState<{ view: ViewType; testToken?: string }>(getInitialView);
 
   useEffect(() => {
     const handlePopState = () => {
-      const path = window.location.pathname;
-      setView(path.startsWith('/admin') ? 'admin' : 'player');
+      setViewState(getInitialView());
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  function navigate(newView: 'player' | 'admin') {
+  function navigate(newView: ViewType) {
     const path = newView === 'admin' ? '/admin' : '/';
     window.history.pushState({}, '', path);
-    setView(newView);
+    setViewState({ view: newView });
   }
 
-  if (view === 'admin') {
+  if (viewState.view === 'test' && viewState.testToken) {
+    return <TestQuiz token={viewState.testToken} />;
+  }
+
+  if (viewState.view === 'admin') {
     return (
       <AuthProvider>
         <ProtectedRoute>

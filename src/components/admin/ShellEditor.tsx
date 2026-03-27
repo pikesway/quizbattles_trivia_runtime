@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Save, AlertTriangle, CheckCircle, Smartphone, RefreshCw, XCircle } from 'lucide-react';
+import { ArrowLeft, Save, AlertTriangle, CheckCircle, Smartphone, RefreshCw, XCircle, Play, Link2, QrCode, X, ChevronDown, ChevronUp, Maximize2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ImageInput } from './ImageInput';
 
@@ -82,6 +82,12 @@ const APPROVED_FONTS = [
   'Poppins', 'Source Sans Pro', 'Nunito', 'Raleway', 'Work Sans'
 ];
 
+const DIFFICULTY_PRESETS = {
+  balanced: { easy: 20, medium: 60, hard: 20 },
+  easier: { easy: 40, medium: 50, hard: 10 },
+  harder: { easy: 10, medium: 50, hard: 40 },
+};
+
 type TabId = 'basics' | 'defaults' | 'theme' | 'screens' | 'preview' | 'validation';
 
 export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
@@ -92,6 +98,11 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
   const [validationData, setValidationData] = useState<ValidationData | null>(null);
   const [validationLoading, setValidationLoading] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [showDifficultyAdvanced, setShowDifficultyAdvanced] = useState(false);
+  const [showBackgroundModal, setShowBackgroundModal] = useState(false);
+  const [showTestLinkModal, setShowTestLinkModal] = useState(false);
+  const [testToken, setTestToken] = useState<string | null>(null);
+  const [generatingToken, setGeneratingToken] = useState(false);
 
   const fetchValidation = useCallback(async () => {
     if (!shell?.id) return;
@@ -139,6 +150,7 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
   useEffect(() => {
     if (shell) {
       setFormData(shell);
+      loadExistingToken(shell.id);
     } else {
       setFormData({
         internal_name: '',
@@ -183,6 +195,77 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
       });
     }
   }, [shell]);
+
+  async function loadExistingToken(shellId: string) {
+    const { data } = await supabase
+      .from('trivia_test_tokens')
+      .select('token')
+      .eq('shell_id', shellId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (data) {
+      setTestToken(data.token);
+    }
+  }
+
+  async function generateTestToken() {
+    if (!shell?.id) return;
+
+    setGeneratingToken(true);
+    try {
+      const token = crypto.randomUUID();
+
+      const { error } = await supabase.from('trivia_test_tokens').insert({
+        shell_id: shell.id,
+        token,
+        is_active: true,
+      });
+
+      if (error) throw error;
+
+      setTestToken(token);
+      setShowTestLinkModal(true);
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setGeneratingToken(false);
+    }
+  }
+
+  async function revokeTestToken() {
+    if (!shell?.id || !testToken) return;
+
+    try {
+      await supabase
+        .from('trivia_test_tokens')
+        .update({ is_active: false })
+        .eq('shell_id', shell.id)
+        .eq('is_active', true);
+
+      setTestToken(null);
+    } catch (err) {
+      alert((err as Error).message);
+    }
+  }
+
+  function getTestUrl() {
+    const baseUrl = window.location.origin;
+    return `${baseUrl}/test/${testToken}`;
+  }
+
+  function copyTestLink() {
+    navigator.clipboard.writeText(getTestUrl());
+    alert('Test link copied to clipboard!');
+  }
+
+  function launchTestQuiz() {
+    if (testToken) {
+      window.open(getTestUrl(), '_blank');
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -231,6 +314,22 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
     });
   }
 
+  function getCurrentDifficultyPreset(): string | null {
+    const mix = formData.default_difficulty_mix;
+    if (!mix) return 'balanced';
+
+    for (const [name, preset] of Object.entries(DIFFICULTY_PRESETS)) {
+      if (mix.easy === preset.easy && mix.medium === preset.medium && mix.hard === preset.hard) {
+        return name;
+      }
+    }
+    return null;
+  }
+
+  function applyDifficultyPreset(preset: keyof typeof DIFFICULTY_PRESETS) {
+    updateFormData('default_difficulty_mix', DIFFICULTY_PRESETS[preset]);
+  }
+
   const tabs: { id: TabId; label: string }[] = [
     { id: 'basics', label: 'Basics' },
     { id: 'defaults', label: 'Defaults' },
@@ -242,6 +341,7 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
 
   const currentBackground = formData.config?.backgrounds?.default || 'https://images.pexels.com/photos/1939485/pexels-photo-1939485.jpeg';
   const theme = formData.config?.theme;
+  const difficultyTotal = (formData.default_difficulty_mix?.easy || 0) + (formData.default_difficulty_mix?.medium || 0) + (formData.default_difficulty_mix?.hard || 0);
 
   return (
     <div>
@@ -257,14 +357,28 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
             {shell ? 'Edit Shell' : 'Create Shell'}
           </h1>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
-        >
-          <Save className="w-4 h-4 mr-2" />
-          {saving ? 'Saving...' : 'Save'}
-        </button>
+        <div className="flex items-center gap-2">
+          {shell?.id && (
+            <>
+              <button
+                onClick={() => testToken ? setShowTestLinkModal(true) : generateTestToken()}
+                disabled={generatingToken}
+                className="inline-flex items-center px-3 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                <Play className="w-4 h-4 mr-2" />
+                {generatingToken ? 'Generating...' : 'Test Quiz'}
+              </button>
+            </>
+          )}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            <Save className="w-4 h-4 mr-2" />
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200">
@@ -391,42 +505,77 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Difficulty Mix (must total 100%)</label>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Easy %</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={formData.default_difficulty_mix?.easy || 20}
-                      onChange={e => updateFormData('default_difficulty_mix.easy', parseInt(e.target.value))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Medium %</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={formData.default_difficulty_mix?.medium || 60}
-                      onChange={e => updateFormData('default_difficulty_mix.medium', parseInt(e.target.value))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Hard %</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={formData.default_difficulty_mix?.hard || 20}
-                      onChange={e => updateFormData('default_difficulty_mix.hard', parseInt(e.target.value))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Difficulty Mix</label>
+                <div className="flex gap-2 mb-3">
+                  {(Object.keys(DIFFICULTY_PRESETS) as Array<keyof typeof DIFFICULTY_PRESETS>).map(preset => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => applyDifficultyPreset(preset)}
+                      className={`px-4 py-2 text-sm font-medium rounded-lg capitalize ${
+                        getCurrentDifficultyPreset() === preset
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowDifficultyAdvanced(!showDifficultyAdvanced)}
+                  className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
+                >
+                  {showDifficultyAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  Advanced (Custom Percentages)
+                </button>
+
+                {showDifficultyAdvanced && (
+                  <div className="mt-3 p-4 bg-gray-50 rounded-lg">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Easy %</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={formData.default_difficulty_mix?.easy || 20}
+                          onChange={e => updateFormData('default_difficulty_mix.easy', parseInt(e.target.value))}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Medium %</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={formData.default_difficulty_mix?.medium || 60}
+                          onChange={e => updateFormData('default_difficulty_mix.medium', parseInt(e.target.value))}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Hard %</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={formData.default_difficulty_mix?.hard || 20}
+                          onChange={e => updateFormData('default_difficulty_mix.hard', parseInt(e.target.value))}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                    {difficultyTotal !== 100 && (
+                      <p className="text-sm text-red-600 mt-2">
+                        Total must equal 100% (currently {difficultyTotal}%)
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -452,27 +601,6 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-              </div>
-
-              <div className="space-y-3">
-                <label className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={formData.is_start_screen_enabled ?? true}
-                    onChange={e => updateFormData('is_start_screen_enabled', e.target.checked)}
-                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-gray-700">Enable Start Screen</span>
-                </label>
-                <label className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={formData.is_lead_screen_enabled ?? true}
-                    onChange={e => updateFormData('is_lead_screen_enabled', e.target.checked)}
-                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-gray-700">Enable Lead Screen</span>
-                </label>
               </div>
             </div>
           )}
@@ -555,41 +683,151 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
                 </div>
               </div>
 
-              <ImageInput
-                label="Default Background"
-                value={formData.config?.backgrounds?.default || ''}
-                onChange={(url) => updateFormData('config.backgrounds.default', url)}
-                folder="backgrounds"
-              />
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">Default Background</label>
+                  {currentBackground && (
+                    <button
+                      type="button"
+                      onClick={() => setShowBackgroundModal(true)}
+                      className="text-sm text-blue-600 hover:text-blue-800 inline-flex items-center gap-1"
+                    >
+                      <Maximize2 className="w-4 h-4" />
+                      View Full Size
+                    </button>
+                  )}
+                </div>
+                <ImageInput
+                  label=""
+                  value={formData.config?.backgrounds?.default || ''}
+                  onChange={(url) => updateFormData('config.backgrounds.default', url)}
+                  folder="backgrounds"
+                />
+                {currentBackground && (
+                  <div className="mt-3">
+                    <div
+                      className="w-full h-48 rounded-lg bg-cover bg-center border border-gray-200 relative cursor-pointer hover:opacity-90 transition-opacity"
+                      style={{ backgroundImage: `url(${currentBackground})` }}
+                      onClick={() => setShowBackgroundModal(true)}
+                    >
+                      <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 hover:bg-opacity-20 transition-all rounded-lg">
+                        <Maximize2 className="w-8 h-8 text-white opacity-0 hover:opacity-100" />
+                      </div>
+                      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 border-t-2 border-dashed border-white/50" />
+                      <div className="absolute top-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded">
+                        Text Safe Zone
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Click to view full image. Dashed line indicates text-safe middle zone.</p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
           {activeTab === 'screens' && (
             <div className="space-y-6 max-w-2xl">
               <div className="p-4 bg-gray-50 rounded-lg">
-                <h3 className="font-medium text-gray-900 mb-3">Start Screen</h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-medium text-gray-900">Start Screen</h3>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={formData.is_start_screen_enabled ?? true}
+                      onChange={e => updateFormData('is_start_screen_enabled', e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-600">Enabled</span>
+                  </label>
+                </div>
+                {formData.is_start_screen_enabled && (
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      placeholder="Headline"
+                      value={formData.config?.screens?.start?.headline || ''}
+                      onChange={e => updateFormData('config.screens.start.headline', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                    />
+                    <textarea
+                      placeholder="Body text"
+                      value={formData.config?.screens?.start?.body || ''}
+                      onChange={e => updateFormData('config.screens.start.body', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                      rows={2}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Button label"
+                      value={formData.config?.screens?.start?.button_label || ''}
+                      onChange={e => updateFormData('config.screens.start.button_label', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-medium text-gray-900">Lead Screen</h3>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={formData.is_lead_screen_enabled ?? true}
+                      onChange={e => updateFormData('is_lead_screen_enabled', e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-600">Enabled</span>
+                  </label>
+                </div>
+                {formData.is_lead_screen_enabled && (
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      placeholder="Headline"
+                      value={formData.config?.screens?.lead?.headline || ''}
+                      onChange={e => updateFormData('config.screens.lead.headline', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                    />
+                    <textarea
+                      placeholder="Body text"
+                      value={formData.config?.screens?.lead?.body || ''}
+                      onChange={e => updateFormData('config.screens.lead.body', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                      rows={2}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Button label"
+                      value={formData.config?.screens?.lead?.button_label || ''}
+                      onChange={e => updateFormData('config.screens.lead.button_label', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <h3 className="font-medium text-gray-900 mb-3">Game Screen</h3>
                 <div className="space-y-3">
-                  <input
-                    type="text"
-                    placeholder="Headline"
-                    value={formData.config?.screens?.start?.headline || ''}
-                    onChange={e => updateFormData('config.screens.start.headline', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                  />
-                  <textarea
-                    placeholder="Body text"
-                    value={formData.config?.screens?.start?.body || ''}
-                    onChange={e => updateFormData('config.screens.start.body', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                    rows={2}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Button label"
-                    value={formData.config?.screens?.start?.button_label || ''}
-                    onChange={e => updateFormData('config.screens.start.button_label', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                  />
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={formData.config?.screens?.game?.show_progress_bar ?? true}
+                      onChange={e => updateFormData('config.screens.game.show_progress_bar', e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <span className="text-sm text-gray-700">Show progress bar</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={formData.config?.screens?.game?.show_question_number ?? true}
+                      onChange={e => updateFormData('config.screens.game.show_question_number', e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <span className="text-sm text-gray-700">Show question number</span>
+                  </label>
                 </div>
               </div>
 
@@ -617,21 +855,32 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
 
               <div className="p-4 bg-gray-50 rounded-lg">
                 <h3 className="font-medium text-gray-900 mb-3">Feedback Modal</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <input
-                    type="text"
-                    placeholder="Correct headline"
-                    value={formData.config?.screens?.feedback?.correct_headline || ''}
-                    onChange={e => updateFormData('config.screens.feedback.correct_headline', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Incorrect headline"
-                    value={formData.config?.screens?.feedback?.incorrect_headline || ''}
-                    onChange={e => updateFormData('config.screens.feedback.incorrect_headline', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                  />
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      type="text"
+                      placeholder="Correct headline"
+                      value={formData.config?.screens?.feedback?.correct_headline || ''}
+                      onChange={e => updateFormData('config.screens.feedback.correct_headline', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Incorrect headline"
+                      value={formData.config?.screens?.feedback?.incorrect_headline || ''}
+                      onChange={e => updateFormData('config.screens.feedback.incorrect_headline', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                    />
+                  </div>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={formData.config?.screens?.feedback?.show_explanation ?? true}
+                      onChange={e => updateFormData('config.screens.feedback.show_explanation', e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <span className="text-sm text-gray-700">Show explanation after answer</span>
+                  </label>
                 </div>
               </div>
             </div>
@@ -655,6 +904,9 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
                     </button>
                   ))}
                 </div>
+                <p className="text-sm text-gray-500">
+                  This is a visual preview only. Use the "Test Quiz" button to play through the full experience.
+                </p>
               </div>
 
               <div className="flex justify-center">
@@ -909,6 +1161,93 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
           )}
         </div>
       </div>
+
+      {showBackgroundModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-80">
+          <div className="relative max-w-4xl w-full max-h-[90vh]">
+            <button
+              onClick={() => setShowBackgroundModal(false)}
+              className="absolute -top-10 right-0 text-white hover:text-gray-300"
+            >
+              <X className="w-8 h-8" />
+            </button>
+            <img
+              src={currentBackground}
+              alt="Background preview"
+              className="w-full h-auto max-h-[85vh] object-contain rounded-lg"
+            />
+            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 border-t-2 border-dashed border-white/50 pointer-events-none" />
+            <p className="text-center text-white text-sm mt-4">
+              Full background image. Dashed line indicates text-safe middle zone for mobile display.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {showTestLinkModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Test Quiz</h2>
+              <button onClick={() => setShowTestLinkModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                <p className="text-sm text-orange-800">
+                  Test mode sessions are isolated and do not affect production data, analytics, or lead records.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Test Link</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={getTestUrl()}
+                    className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
+                  />
+                  <button
+                    onClick={copyTestLink}
+                    className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                    title="Copy link"
+                  >
+                    <Link2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-center p-4 bg-gray-50 rounded-lg">
+                <div className="text-center">
+                  <div className="w-32 h-32 bg-white border border-gray-200 rounded-lg mx-auto mb-2 flex items-center justify-center">
+                    <QrCode className="w-24 h-24 text-gray-800" />
+                  </div>
+                  <p className="text-xs text-gray-500">QR Code for test link</p>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={launchTestQuiz}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 inline-flex items-center justify-center"
+                >
+                  <Play className="w-4 h-4 mr-2" />
+                  Launch Test
+                </button>
+                <button
+                  onClick={revokeTestToken}
+                  className="px-4 py-2 bg-red-50 text-red-600 text-sm font-medium rounded-lg hover:bg-red-100"
+                >
+                  Revoke Link
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

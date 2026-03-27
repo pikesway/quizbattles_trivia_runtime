@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Archive, Copy, CreditCard as Edit2, ChevronDown } from 'lucide-react';
+import { Plus, Search, Archive, Copy, CreditCard as Edit2, ChevronDown, Play, Link2, QrCode, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface Shell {
@@ -43,6 +43,9 @@ export function ShellList({ onSelectShell, onCreateShell }: ShellListProps) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [visibilityFilter, setVisibilityFilter] = useState('');
+  const [showTestModal, setShowTestModal] = useState<Shell | null>(null);
+  const [testToken, setTestToken] = useState<string | null>(null);
+  const [generatingToken, setGeneratingToken] = useState(false);
 
   useEffect(() => {
     loadShells();
@@ -124,6 +127,78 @@ export function ShellList({ onSelectShell, onCreateShell }: ShellListProps) {
       loadShells();
     } catch (err) {
       alert((err as Error).message);
+    }
+  }
+
+  async function openTestModal(e: React.MouseEvent, shell: Shell) {
+    e.stopPropagation();
+    setShowTestModal(shell);
+    setTestToken(null);
+
+    const { data } = await supabase
+      .from('trivia_test_tokens')
+      .select('token')
+      .eq('shell_id', shell.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (data) {
+      setTestToken(data.token);
+    }
+  }
+
+  async function generateTestToken() {
+    if (!showTestModal) return;
+
+    setGeneratingToken(true);
+    try {
+      const token = crypto.randomUUID();
+
+      const { error } = await supabase.from('trivia_test_tokens').insert({
+        shell_id: showTestModal.id,
+        token,
+        is_active: true,
+      });
+
+      if (error) throw error;
+      setTestToken(token);
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setGeneratingToken(false);
+    }
+  }
+
+  async function revokeTestToken() {
+    if (!showTestModal || !testToken) return;
+
+    try {
+      await supabase
+        .from('trivia_test_tokens')
+        .update({ is_active: false })
+        .eq('shell_id', showTestModal.id)
+        .eq('is_active', true);
+
+      setTestToken(null);
+    } catch (err) {
+      alert((err as Error).message);
+    }
+  }
+
+  function getTestUrl() {
+    return `${window.location.origin}/test/${testToken}`;
+  }
+
+  function copyTestLink() {
+    navigator.clipboard.writeText(getTestUrl());
+    alert('Test link copied to clipboard!');
+  }
+
+  function launchTestQuiz() {
+    if (testToken) {
+      window.open(getTestUrl(), '_blank');
     }
   }
 
@@ -230,6 +305,13 @@ export function ShellList({ onSelectShell, onCreateShell }: ShellListProps) {
 
                   <div className="flex items-center gap-1 ml-4">
                     <button
+                      onClick={e => openTestModal(e, shell)}
+                      className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg"
+                      title="Test Quiz"
+                    >
+                      <Play className="w-4 h-4" />
+                    </button>
+                    <button
                       onClick={e => { e.stopPropagation(); onSelectShell(shell); }}
                       className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
                       title="Edit"
@@ -259,6 +341,87 @@ export function ShellList({ onSelectShell, onCreateShell }: ShellListProps) {
           </div>
         )}
       </div>
+
+      {showTestModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Test Quiz: {showTestModal.internal_name}</h2>
+              <button onClick={() => setShowTestModal(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                <p className="text-sm text-orange-800">
+                  Test mode sessions are isolated and do not affect production data, analytics, or lead records.
+                </p>
+              </div>
+
+              {testToken ? (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Test Link</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={getTestUrl()}
+                        className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
+                      />
+                      <button
+                        onClick={copyTestLink}
+                        className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                        title="Copy link"
+                      >
+                        <Link2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-center p-4 bg-gray-50 rounded-lg">
+                    <div className="text-center">
+                      <div className="w-32 h-32 bg-white border border-gray-200 rounded-lg mx-auto mb-2 flex items-center justify-center">
+                        <QrCode className="w-24 h-24 text-gray-800" />
+                      </div>
+                      <p className="text-xs text-gray-500">QR Code for test link</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={launchTestQuiz}
+                      className="flex-1 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 inline-flex items-center justify-center"
+                    >
+                      <Play className="w-4 h-4 mr-2" />
+                      Launch Test
+                    </button>
+                    <button
+                      onClick={revokeTestToken}
+                      className="px-4 py-2 bg-red-50 text-red-600 text-sm font-medium rounded-lg hover:bg-red-100"
+                    >
+                      Revoke Link
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-gray-600 mb-4">No active test link for this shell.</p>
+                  <button
+                    onClick={generateTestToken}
+                    disabled={generatingToken}
+                    className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 inline-flex items-center"
+                  >
+                    <Play className="w-4 h-4 mr-2" />
+                    {generatingToken ? 'Generating...' : 'Generate Test Link'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
