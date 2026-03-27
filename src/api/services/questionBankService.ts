@@ -243,6 +243,121 @@ export class QuestionBankService {
     return results;
   }
 
+  async updateQuestion(
+    id: string,
+    input: Partial<CreateQuestionWithAnswersInput>
+  ): Promise<QuestionWithAnswers> {
+    const existingQuestion = await this.questionRepo.getQuestionById(id);
+    if (!existingQuestion) {
+      throw new Error('Question not found');
+    }
+
+    if (input.answers) {
+      this.validateAnswers(input.answers);
+    }
+
+    const questionUpdates: Record<string, unknown> = {};
+    if (input.question_text !== undefined) questionUpdates.question_text = input.question_text;
+    if (input.explanation !== undefined) questionUpdates.explanation = input.explanation;
+    if (input.topic !== undefined) questionUpdates.topic = input.topic;
+    if (input.tags !== undefined) questionUpdates.tags = input.tags;
+    if (input.difficulty_level !== undefined) questionUpdates.difficulty_level = input.difficulty_level;
+
+    if (Object.keys(questionUpdates).length > 0) {
+      await this.questionRepo.updateQuestion(id, questionUpdates);
+    }
+
+    if (input.answers) {
+      await this.questionRepo.deleteAnswersByQuestionId(id);
+      const answerInputs: CreateAnswerInput[] = input.answers.map((a, index) => ({
+        question_id: id,
+        answer_text: a.text,
+        is_correct: a.is_correct,
+        display_order: index + 1,
+      }));
+      await this.questionRepo.createAnswers(answerInputs);
+    }
+
+    const updatedQuestion = await this.questionRepo.getQuestionWithAnswers(id);
+    if (!updatedQuestion) {
+      throw new Error('Failed to retrieve updated question');
+    }
+    return updatedQuestion;
+  }
+
+  async getQuestionUsage(questionId: string): Promise<{
+    shells: Array<{ id: string; internal_name: string; status: string }>;
+    hasActiveUsage: boolean;
+  }> {
+    return this.questionRepo.getQuestionUsage(questionId);
+  }
+
+  async deleteQuestion(
+    id: string,
+    force = false
+  ): Promise<{
+    deleted: boolean;
+    blockedByShells?: Array<{ id: string; internal_name: string; status: string }>;
+  }> {
+    const question = await this.questionRepo.getQuestionById(id);
+    if (!question) {
+      throw new Error('Question not found');
+    }
+
+    const usage = await this.questionRepo.getQuestionUsage(id);
+
+    if (usage.hasActiveUsage && !force) {
+      return {
+        deleted: false,
+        blockedByShells: usage.shells.filter(s => s.status === 'active' || s.status === 'ready'),
+      };
+    }
+
+    await this.questionRepo.deleteAnswersByQuestionId(id);
+    await this.questionRepo.deleteQuestion(id);
+
+    return { deleted: true };
+  }
+
+  async bulkDeleteQuestions(
+    questionIds: string[],
+    force = false
+  ): Promise<{
+    deleted: number;
+    blocked: Array<{
+      questionId: string;
+      shells: Array<{ id: string; internal_name: string; status: string }>;
+    }>;
+    failed: string[];
+  }> {
+    const results = {
+      deleted: 0,
+      blocked: [] as Array<{
+        questionId: string;
+        shells: Array<{ id: string; internal_name: string; status: string }>;
+      }>,
+      failed: [] as string[],
+    };
+
+    for (const id of questionIds) {
+      try {
+        const result = await this.deleteQuestion(id, force);
+        if (result.deleted) {
+          results.deleted++;
+        } else if (result.blockedByShells) {
+          results.blocked.push({
+            questionId: id,
+            shells: result.blockedByShells,
+          });
+        }
+      } catch {
+        results.failed.push(id);
+      }
+    }
+
+    return results;
+  }
+
   private validateAnswers(answers: Array<{ text: string; is_correct: boolean }>): void {
     if (answers.length < 2) {
       throw new Error('At least 2 answers are required');

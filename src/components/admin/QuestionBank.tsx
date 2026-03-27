@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, ChevronDown, CheckCircle, XCircle, Eye, Plus } from 'lucide-react';
+import { Search, ChevronDown, CheckCircle, XCircle, Eye, Plus, CreditCard as Edit2, Trash2, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface Question {
@@ -24,6 +24,12 @@ interface QuestionWithAnswers extends Question {
   }>;
 }
 
+interface ShellUsage {
+  id: string;
+  internal_name: string;
+  status: string;
+}
+
 const difficultyColors: Record<string, string> = {
   easy: 'bg-green-100 text-green-700',
   medium: 'bg-yellow-100 text-yellow-700',
@@ -46,7 +52,14 @@ export function QuestionBank() {
   const [reviewStateFilter, setReviewStateFilter] = useState('');
   const [selectedQuestion, setSelectedQuestion] = useState<QuestionWithAnswers | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingQuestion, setEditingQuestion] = useState<QuestionWithAnswers | null>(null);
   const [topics, setTopics] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'single' | 'bulk'; id?: string } | null>(null);
+  const [deleteUsageWarning, setDeleteUsageWarning] = useState<ShellUsage[]>([]);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadQuestions();
@@ -81,6 +94,7 @@ export function QuestionBank() {
 
       setQuestions(data || []);
       setTotal(count || 0);
+      setSelectedIds(new Set());
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -145,9 +159,158 @@ export function QuestionBank() {
     }
   }
 
+  async function openEditModal(questionId: string) {
+    const { data: question, error: qError } = await supabase
+      .from('trivia_questions')
+      .select('*')
+      .eq('id', questionId)
+      .single();
+
+    if (qError) {
+      alert(qError.message);
+      return;
+    }
+
+    const { data: answers } = await supabase
+      .from('trivia_answers')
+      .select('*')
+      .eq('question_id', questionId)
+      .order('display_order', { ascending: true });
+
+    setEditingQuestion({ ...question, answers: answers || [] });
+    setShowEditModal(true);
+    setSelectedQuestion(null);
+  }
+
+  async function checkQuestionUsage(questionId: string): Promise<ShellUsage[]> {
+    const { data: links } = await supabase
+      .from('trivia_shell_question_links')
+      .select('shell_id')
+      .eq('question_id', questionId);
+
+    if (!links || links.length === 0) return [];
+
+    const shellIds = links.map(l => l.shell_id);
+    const { data: shells } = await supabase
+      .from('trivia_shells')
+      .select('id, internal_name, status')
+      .in('id', shellIds)
+      .in('status', ['active', 'ready']);
+
+    return shells || [];
+  }
+
+  async function handleDeleteClick(questionId: string) {
+    const usage = await checkQuestionUsage(questionId);
+    setDeleteUsageWarning(usage);
+    setDeleteTarget({ type: 'single', id: questionId });
+    setShowDeleteConfirm(true);
+  }
+
+  async function handleBulkDeleteClick() {
+    const allUsage: ShellUsage[] = [];
+    for (const id of selectedIds) {
+      const usage = await checkQuestionUsage(id);
+      usage.forEach(u => {
+        if (!allUsage.find(a => a.id === u.id)) {
+          allUsage.push(u);
+        }
+      });
+    }
+    setDeleteUsageWarning(allUsage);
+    setDeleteTarget({ type: 'bulk' });
+    setShowDeleteConfirm(true);
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+
+    try {
+      if (deleteTarget.type === 'single' && deleteTarget.id) {
+        const { error: answerError } = await supabase
+          .from('trivia_answers')
+          .delete()
+          .eq('question_id', deleteTarget.id);
+
+        if (answerError) throw answerError;
+
+        const { error: linkError } = await supabase
+          .from('trivia_shell_question_links')
+          .delete()
+          .eq('question_id', deleteTarget.id);
+
+        if (linkError) throw linkError;
+
+        const { error: questionError } = await supabase
+          .from('trivia_questions')
+          .delete()
+          .eq('id', deleteTarget.id);
+
+        if (questionError) throw questionError;
+      } else if (deleteTarget.type === 'bulk') {
+        const ids = Array.from(selectedIds);
+
+        for (const id of ids) {
+          const { error: answerError } = await supabase
+            .from('trivia_answers')
+            .delete()
+            .eq('question_id', id);
+
+          if (answerError) throw answerError;
+
+          const { error: linkError } = await supabase
+            .from('trivia_shell_question_links')
+            .delete()
+            .eq('question_id', id);
+
+          if (linkError) throw linkError;
+
+          const { error: questionError } = await supabase
+            .from('trivia_questions')
+            .delete()
+            .eq('id', id);
+
+          if (questionError) throw questionError;
+        }
+      }
+
+      loadQuestions();
+      setShowDeleteConfirm(false);
+      setDeleteTarget(null);
+      setDeleteUsageWarning([]);
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === filteredQuestions.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredQuestions.map(q => q.id)));
+    }
+  }
+
   const filteredQuestions = questions.filter(q =>
     q.question_text.toLowerCase().includes(search.toLowerCase())
   );
+
+  const allSelected = filteredQuestions.length > 0 && selectedIds.size === filteredQuestions.length;
 
   return (
     <div>
@@ -164,6 +327,29 @@ export function QuestionBank() {
           Add Question
         </button>
       </div>
+
+      {selectedIds.size > 0 && (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
+          <span className="text-sm text-blue-700">
+            {selectedIds.size} question{selectedIds.size !== 1 ? 's' : ''} selected
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800"
+            >
+              Clear Selection
+            </button>
+            <button
+              onClick={handleBulkDeleteClick}
+              className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 inline-flex items-center"
+            >
+              <Trash2 className="w-4 h-4 mr-1" />
+              Delete Selected
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-lg border border-gray-200 mb-6">
         <div className="p-4 border-b border-gray-200">
@@ -217,14 +403,34 @@ export function QuestionBank() {
           <div className="p-8 text-center text-gray-500">No questions found</div>
         ) : (
           <div className="divide-y divide-gray-200">
+            <div className="p-4 bg-gray-50 border-b border-gray-200">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-600">Select All</span>
+              </label>
+            </div>
             {filteredQuestions.map(question => (
               <div
                 key={question.id}
-                className="p-4 hover:bg-gray-50 cursor-pointer"
-                onClick={() => viewQuestion(question.id)}
+                className="p-4 hover:bg-gray-50"
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(question.id)}
+                    onChange={() => toggleSelect(question.id)}
+                    className="mt-1 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    onClick={e => e.stopPropagation()}
+                  />
+                  <div
+                    className="flex-1 min-w-0 cursor-pointer"
+                    onClick={() => viewQuestion(question.id)}
+                  >
                     <p className="text-sm text-gray-900 line-clamp-2 mb-2">
                       {question.question_text}
                     </p>
@@ -246,13 +452,27 @@ export function QuestionBank() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1 ml-4">
+                  <div className="flex items-center gap-1 ml-4 shrink-0">
                     <button
                       onClick={e => { e.stopPropagation(); viewQuestion(question.id); }}
                       className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
                       title="View"
                     >
                       <Eye className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); openEditModal(question.id); }}
+                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                      title="Edit"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); handleDeleteClick(question.id); }}
+                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </button>
                     {question.review_state === 'pending_review' && (
                       <>
@@ -281,113 +501,62 @@ export function QuestionBank() {
       </div>
 
       {selectedQuestion && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-auto">
-            <div className="p-6">
-              <div className="flex items-start justify-between mb-4">
-                <h2 className="text-lg font-bold text-gray-900">Question Details</h2>
-                <button
-                  onClick={() => setSelectedQuestion(null)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <XCircle className="w-6 h-6" />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Question</label>
-                  <p className="text-gray-900">{selectedQuestion.question_text}</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Answers</label>
-                  <div className="space-y-2">
-                    {selectedQuestion.answers.map(answer => (
-                      <div
-                        key={answer.id}
-                        className={`p-3 rounded-lg border ${
-                          answer.is_correct
-                            ? 'border-green-300 bg-green-50'
-                            : 'border-gray-200'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className={answer.is_correct ? 'text-green-800' : 'text-gray-700'}>
-                            {answer.answer_text}
-                          </span>
-                          {answer.is_correct && (
-                            <CheckCircle className="w-4 h-4 text-green-600" />
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {selectedQuestion.explanation && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-500 mb-1">Explanation</label>
-                    <p className="text-gray-700">{selectedQuestion.explanation}</p>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-500 mb-1">Topic</label>
-                    <p className="text-gray-700">{selectedQuestion.topic || '-'}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-500 mb-1">Difficulty</label>
-                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${difficultyColors[selectedQuestion.difficulty_level]}`}>
-                      {selectedQuestion.difficulty_level}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex gap-2 pt-4 border-t border-gray-200">
-                  {selectedQuestion.review_state === 'pending_review' && (
-                    <>
-                      <button
-                        onClick={() => {
-                          approveQuestion(selectedQuestion.id);
-                          setSelectedQuestion(null);
-                        }}
-                        className="flex-1 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => {
-                          rejectQuestion(selectedQuestion.id);
-                          setSelectedQuestion(null);
-                        }}
-                        className="flex-1 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700"
-                      >
-                        Reject
-                      </button>
-                    </>
-                  )}
-                  <button
-                    onClick={() => setSelectedQuestion(null)}
-                    className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <QuestionDetailModal
+          question={selectedQuestion}
+          onClose={() => setSelectedQuestion(null)}
+          onEdit={() => openEditModal(selectedQuestion.id)}
+          onDelete={() => handleDeleteClick(selectedQuestion.id)}
+          onApprove={() => {
+            approveQuestion(selectedQuestion.id);
+            setSelectedQuestion(null);
+          }}
+          onReject={() => {
+            rejectQuestion(selectedQuestion.id);
+            setSelectedQuestion(null);
+          }}
+        />
       )}
 
       {showCreateModal && (
-        <CreateQuestionModal
+        <QuestionFormModal
+          mode="create"
           topics={topics}
           onClose={() => setShowCreateModal(false)}
-          onCreated={() => {
+          onSaved={() => {
             setShowCreateModal(false);
             loadQuestions();
+          }}
+        />
+      )}
+
+      {showEditModal && editingQuestion && (
+        <QuestionFormModal
+          mode="edit"
+          topics={topics}
+          question={editingQuestion}
+          onClose={() => {
+            setShowEditModal(false);
+            setEditingQuestion(null);
+          }}
+          onSaved={() => {
+            setShowEditModal(false);
+            setEditingQuestion(null);
+            loadQuestions();
+          }}
+        />
+      )}
+
+      {showDeleteConfirm && (
+        <DeleteConfirmModal
+          type={deleteTarget?.type || 'single'}
+          count={deleteTarget?.type === 'bulk' ? selectedIds.size : 1}
+          usageWarning={deleteUsageWarning}
+          deleting={deleting}
+          onConfirm={confirmDelete}
+          onCancel={() => {
+            setShowDeleteConfirm(false);
+            setDeleteTarget(null);
+            setDeleteUsageWarning([]);
           }}
         />
       )}
@@ -395,20 +564,142 @@ export function QuestionBank() {
   );
 }
 
-interface CreateQuestionModalProps {
-  topics: string[];
+interface QuestionDetailModalProps {
+  question: QuestionWithAnswers;
   onClose: () => void;
-  onCreated: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onApprove: () => void;
+  onReject: () => void;
 }
 
-function CreateQuestionModal({ topics, onClose, onCreated }: CreateQuestionModalProps) {
+function QuestionDetailModal({ question, onClose, onEdit, onDelete, onApprove, onReject }: QuestionDetailModalProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-auto">
+        <div className="p-6">
+          <div className="flex items-start justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-900">Question Details</h2>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <XCircle className="w-6 h-6" />
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-500 mb-1">Question</label>
+              <p className="text-gray-900">{question.question_text}</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-500 mb-1">Answers</label>
+              <div className="space-y-2">
+                {question.answers.map(answer => (
+                  <div
+                    key={answer.id}
+                    className={`p-3 rounded-lg border ${
+                      answer.is_correct
+                        ? 'border-green-300 bg-green-50'
+                        : 'border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className={answer.is_correct ? 'text-green-800' : 'text-gray-700'}>
+                        {answer.answer_text}
+                      </span>
+                      {answer.is_correct && (
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {question.explanation && (
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Explanation</label>
+                <p className="text-gray-700">{question.explanation}</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Topic</label>
+                <p className="text-gray-700">{question.topic || '-'}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Difficulty</label>
+                <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${difficultyColors[question.difficulty_level]}`}>
+                  {question.difficulty_level}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-4 border-t border-gray-200">
+              <button
+                onClick={onEdit}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 inline-flex items-center justify-center"
+              >
+                <Edit2 className="w-4 h-4 mr-2" />
+                Edit
+              </button>
+              <button
+                onClick={onDelete}
+                className="px-4 py-2 bg-red-50 text-red-600 text-sm font-medium rounded-lg hover:bg-red-100 inline-flex items-center justify-center"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete
+              </button>
+              {question.review_state === 'pending_review' && (
+                <>
+                  <button
+                    onClick={onApprove}
+                    className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    onClick={onReject}
+                    className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700"
+                  >
+                    Reject
+                  </button>
+                </>
+              )}
+              <button
+                onClick={onClose}
+                className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface QuestionFormModalProps {
+  mode: 'create' | 'edit';
+  topics: string[];
+  question?: QuestionWithAnswers;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+function QuestionFormModal({ mode, topics, question, onClose, onSaved }: QuestionFormModalProps) {
   const [formData, setFormData] = useState({
-    question_text: '',
-    explanation: '',
-    topic: '',
-    tags: '',
-    difficulty_level: 'medium',
-    answers: [
+    question_text: question?.question_text || '',
+    explanation: question?.explanation || '',
+    topic: question?.topic || '',
+    tags: question?.tags?.join(', ') || '',
+    difficulty_level: question?.difficulty_level || 'medium',
+    answers: question?.answers?.map(a => ({ text: a.answer_text, is_correct: a.is_correct })) || [
       { text: '', is_correct: true },
       { text: '', is_correct: false },
       { text: '', is_correct: false },
@@ -423,41 +714,90 @@ function CreateQuestionModal({ topics, onClose, onCreated }: CreateQuestionModal
 
     try {
       const difficultyMap: Record<string, number> = { easy: 1, medium: 3, hard: 5 };
+      const tagsArray = formData.tags.split(',').map(t => t.trim()).filter(Boolean);
+      const answersToSave = formData.answers.filter(a => a.text.trim());
 
-      const { data: question, error: qError } = await supabase
-        .from('trivia_questions')
-        .insert({
-          question_text: formData.question_text,
-          explanation: formData.explanation,
-          topic: formData.topic,
-          tags: formData.tags.split(',').map(t => t.trim()).filter(Boolean),
-          difficulty: difficultyMap[formData.difficulty_level],
-          difficulty_level: formData.difficulty_level,
-          review_state: 'approved',
-          source_type: 'manual',
-          is_active: true,
-        })
-        .select()
-        .single();
+      if (answersToSave.length < 2) {
+        alert('At least 2 answers are required');
+        setSaving(false);
+        return;
+      }
 
-      if (qError) throw qError;
+      const correctCount = answersToSave.filter(a => a.is_correct).length;
+      if (correctCount !== 1) {
+        alert('Exactly one answer must be marked as correct');
+        setSaving(false);
+        return;
+      }
 
-      const answerInserts = formData.answers
-        .filter(a => a.text.trim())
-        .map((a, i) => ({
+      if (mode === 'create') {
+        const { data: newQuestion, error: qError } = await supabase
+          .from('trivia_questions')
+          .insert({
+            question_text: formData.question_text,
+            explanation: formData.explanation,
+            topic: formData.topic,
+            tags: tagsArray,
+            difficulty: difficultyMap[formData.difficulty_level],
+            difficulty_level: formData.difficulty_level,
+            review_state: 'approved',
+            source_type: 'manual',
+            is_active: true,
+          })
+          .select()
+          .single();
+
+        if (qError) throw qError;
+
+        const answerInserts = answersToSave.map((a, i) => ({
+          question_id: newQuestion.id,
+          answer_text: a.text,
+          is_correct: a.is_correct,
+          display_order: i + 1,
+        }));
+
+        const { error: aError } = await supabase
+          .from('trivia_answers')
+          .insert(answerInserts);
+
+        if (aError) throw aError;
+      } else if (question) {
+        const { error: qError } = await supabase
+          .from('trivia_questions')
+          .update({
+            question_text: formData.question_text,
+            explanation: formData.explanation,
+            topic: formData.topic,
+            tags: tagsArray,
+            difficulty: difficultyMap[formData.difficulty_level],
+            difficulty_level: formData.difficulty_level,
+          })
+          .eq('id', question.id);
+
+        if (qError) throw qError;
+
+        const { error: deleteError } = await supabase
+          .from('trivia_answers')
+          .delete()
+          .eq('question_id', question.id);
+
+        if (deleteError) throw deleteError;
+
+        const answerInserts = answersToSave.map((a, i) => ({
           question_id: question.id,
           answer_text: a.text,
           is_correct: a.is_correct,
           display_order: i + 1,
         }));
 
-      const { error: aError } = await supabase
-        .from('trivia_answers')
-        .insert(answerInserts);
+        const { error: aError } = await supabase
+          .from('trivia_answers')
+          .insert(answerInserts);
 
-      if (aError) throw aError;
+        if (aError) throw aError;
+      }
 
-      onCreated();
+      onSaved();
     } catch (err) {
       alert((err as Error).message);
     } finally {
@@ -477,7 +817,9 @@ function CreateQuestionModal({ topics, onClose, onCreated }: CreateQuestionModal
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-auto">
         <form onSubmit={handleSubmit} className="p-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-bold text-gray-900">Add Question</h2>
+            <h2 className="text-lg font-bold text-gray-900">
+              {mode === 'create' ? 'Add Question' : 'Edit Question'}
+            </h2>
             <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
               <XCircle className="w-6 h-6" />
             </button>
@@ -584,7 +926,7 @@ function CreateQuestionModal({ topics, onClose, onCreated }: CreateQuestionModal
                 disabled={saving}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
-                {saving ? 'Creating...' : 'Create Question'}
+                {saving ? 'Saving...' : mode === 'create' ? 'Create Question' : 'Save Changes'}
               </button>
               <button
                 type="button"
@@ -596,6 +938,81 @@ function CreateQuestionModal({ topics, onClose, onCreated }: CreateQuestionModal
             </div>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+interface DeleteConfirmModalProps {
+  type: 'single' | 'bulk';
+  count: number;
+  usageWarning: ShellUsage[];
+  deleting: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function DeleteConfirmModal({ type, count, usageWarning, deleting, onConfirm, onCancel }: DeleteConfirmModalProps) {
+  const hasActiveUsage = usageWarning.length > 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div className="p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className={`p-2 rounded-full ${hasActiveUsage ? 'bg-orange-100' : 'bg-red-100'}`}>
+              {hasActiveUsage ? (
+                <AlertTriangle className="w-6 h-6 text-orange-600" />
+              ) : (
+                <Trash2 className="w-6 h-6 text-red-600" />
+              )}
+            </div>
+            <h2 className="text-lg font-bold text-gray-900">
+              {type === 'single' ? 'Delete Question' : `Delete ${count} Questions`}
+            </h2>
+          </div>
+
+          {hasActiveUsage && (
+            <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+              <p className="text-sm text-orange-800 font-medium mb-2">
+                Warning: {type === 'single' ? 'This question is' : 'Some questions are'} assigned to active quizzes:
+              </p>
+              <ul className="text-sm text-orange-700 list-disc list-inside">
+                {usageWarning.map(shell => (
+                  <li key={shell.id}>
+                    {shell.internal_name} ({shell.status})
+                  </li>
+                ))}
+              </ul>
+              <p className="text-sm text-orange-800 mt-2">
+                Deleting will remove {type === 'single' ? 'this question' : 'these questions'} from these quizzes.
+              </p>
+            </div>
+          )}
+
+          <p className="text-sm text-gray-600 mb-6">
+            {type === 'single'
+              ? 'Are you sure you want to delete this question? This action cannot be undone.'
+              : `Are you sure you want to delete ${count} questions? This action cannot be undone.`}
+          </p>
+
+          <div className="flex gap-2">
+            <button
+              onClick={onConfirm}
+              disabled={deleting}
+              className="flex-1 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50"
+            >
+              {deleting ? 'Deleting...' : 'Delete'}
+            </button>
+            <button
+              onClick={onCancel}
+              disabled={deleting}
+              className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -329,6 +329,45 @@ export class QuestionBankRepository {
     return uniqueTags.sort();
   }
 
+  async getQuestionUsage(questionId: string): Promise<{
+    shells: Array<{ id: string; internal_name: string; status: string }>;
+    hasActiveUsage: boolean;
+  }> {
+    const { data: links, error: linkError } = await supabase
+      .from('trivia_shell_question_links')
+      .select('shell_id')
+      .eq('question_id', questionId);
+
+    if (linkError) throw new Error(`Failed to check shell links: ${linkError.message}`);
+
+    const shellIds = (links || []).map(l => l.shell_id);
+
+    if (shellIds.length === 0) {
+      return { shells: [], hasActiveUsage: false };
+    }
+
+    const { data: shells, error: shellError } = await supabase
+      .from('trivia_shells')
+      .select('id, internal_name, status')
+      .in('id', shellIds);
+
+    if (shellError) throw new Error(`Failed to fetch shells: ${shellError.message}`);
+
+    const shellList = shells || [];
+    const hasActiveUsage = shellList.some(s => s.status === 'active' || s.status === 'ready');
+
+    return { shells: shellList, hasActiveUsage };
+  }
+
+  async deleteAnswersByQuestionId(questionId: string): Promise<void> {
+    const { error } = await supabase
+      .from('trivia_answers')
+      .delete()
+      .eq('question_id', questionId);
+
+    if (error) throw new Error(`Failed to delete answers: ${error.message}`);
+  }
+
   private difficultyToNumeric(level: DifficultyLevel): number {
     switch (level) {
       case 'easy': return 1;

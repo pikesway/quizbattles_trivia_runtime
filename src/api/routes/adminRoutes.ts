@@ -24,9 +24,13 @@ router.put('/shells/:id/questions/reorder', (req, res) => controller.reorderShel
 
 router.get('/questions', (req, res) => controller.listQuestions(req, res));
 router.post('/questions', (req, res) => controller.createQuestion(req, res));
+router.post('/questions/bulk-delete', (req, res) => controller.bulkDeleteQuestions(req, res));
 router.get('/questions/topics', (req, res) => controller.getTopics(req, res));
 router.get('/questions/tags', (req, res) => controller.getTags(req, res));
 router.get('/questions/:id', (req, res) => controller.getQuestion(req, res));
+router.put('/questions/:id', (req, res) => controller.updateQuestion(req, res));
+router.delete('/questions/:id', (req, res) => controller.deleteQuestion(req, res));
+router.get('/questions/:id/usage', (req, res) => controller.getQuestionUsage(req, res));
 router.get('/questions/:id/reviews', (req, res) => controller.getReviewHistory(req, res));
 
 router.get('/reviews', (req, res) => controller.getReviewQueue(req, res));

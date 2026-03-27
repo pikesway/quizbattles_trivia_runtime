@@ -286,6 +286,63 @@ export class AdminController {
     }
   }
 
+  async updateQuestion(req: Request, res: Response): Promise<void> {
+    try {
+      const questionId = req.params.id as string;
+      const question = await this.questionService.updateQuestion(questionId, req.body);
+      res.json(successResponse(question));
+    } catch (error) {
+      res.status(400).json(errorResponse('QUESTION_UPDATE_ERROR', (error as Error).message));
+    }
+  }
+
+  async deleteQuestion(req: Request, res: Response): Promise<void> {
+    try {
+      const questionId = req.params.id as string;
+      const force = req.query.force === 'true';
+      const result = await this.questionService.deleteQuestion(questionId, force);
+
+      if (!result.deleted && result.blockedByShells) {
+        res.status(409).json(errorResponse(
+          'QUESTION_IN_USE',
+          'Question is assigned to active quizzes',
+          { shells: result.blockedByShells }
+        ));
+        return;
+      }
+
+      res.json(successResponse({ deleted: true }));
+    } catch (error) {
+      res.status(400).json(errorResponse('QUESTION_DELETE_ERROR', (error as Error).message));
+    }
+  }
+
+  async getQuestionUsage(req: Request, res: Response): Promise<void> {
+    try {
+      const questionId = req.params.id as string;
+      const usage = await this.questionService.getQuestionUsage(questionId);
+      res.json(successResponse(usage));
+    } catch (error) {
+      res.status(400).json(errorResponse('QUESTION_USAGE_ERROR', (error as Error).message));
+    }
+  }
+
+  async bulkDeleteQuestions(req: Request, res: Response): Promise<void> {
+    try {
+      const { question_ids, force } = req.body;
+
+      if (!question_ids || !Array.isArray(question_ids)) {
+        res.status(400).json(errorResponse('INVALID_INPUT', 'question_ids must be an array'));
+        return;
+      }
+
+      const result = await this.questionService.bulkDeleteQuestions(question_ids, force === true);
+      res.json(successResponse(result));
+    } catch (error) {
+      res.status(400).json(errorResponse('BULK_DELETE_ERROR', (error as Error).message));
+    }
+  }
+
   async getReviewQueue(req: Request, res: Response): Promise<void> {
     try {
       const limit = parseInt(req.query.limit as string) || 50;

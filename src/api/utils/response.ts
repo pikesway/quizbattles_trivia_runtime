@@ -7,12 +7,17 @@ export function successResponse<T>(data: T): ApiResponse<T> {
   };
 }
 
-export function errorResponse(code: string, message: string): ApiResponse<never> {
+export function errorResponse(
+  code: string,
+  message: string,
+  details?: Record<string, unknown>
+): ApiResponse<never> {
   return {
     success: false,
     error: {
       code,
       message,
+      ...details,
     },
   };
 }
