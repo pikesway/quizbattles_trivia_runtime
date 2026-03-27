@@ -1,0 +1,358 @@
+You are building a production-grade Trivia application.
+
+This application contains two bounded modules:
+
+1. Trivia Runtime
+2. Trivia Authoring/Admin
+
+You must follow these global rules at all times.
+
+---
+
+# ARCHITECTURE RULES (NON-NEGOTIABLE)
+
+## 1. STRICT SERVICE BOUNDARIES
+
+This application is:
+- the Trivia Runtime system
+- the Trivia Authoring/Admin system
+
+It is NOT:
+- the platform
+- the lead system
+- the rewards system
+- the redemption system
+- the campaign management system
+
+NEVER:
+- store leads as the source of truth
+- manage rewards
+- implement leaderboard ownership
+- absorb campaign ownership from the platform
+- move platform responsibilities into Trivia
+
+If something belongs to another system, integrate through API or reference only. Do not implement it here.
+
+---
+
+## 2. TWO INTERNAL MODULES, ONE APP
+
+This app has two distinct internal surfaces:
+
+### Runtime
+Owns:
+- session lifecycle
+- question delivery
+- answer validation
+- timers
+- scoring
+- completion handling
+- runtime snapshots
+
+### Authoring/Admin
+Owns:
+- quiz shells
+- question bank
+- CSV import
+- webhook ingestion
+- review and approval
+- shell theme/screen configuration
+- shell validation
+- shell visibility rules
+
+Do not blur Runtime and Authoring responsibilities.
+
+---
+
+## 3. SINGLE RESPONSIBILITY
+
+Every module must have ONE clear responsibility:
+
+- controllers / routes → handle HTTP
+- services → handle business logic
+- repositories / data layer → handle database access
+- validators → handle input/config validation
+- mappers / serializers → shape response payloads
+
+Do NOT mix these layers.
+
+---
+
+## 4. NO SHORTCUTS / NO MOCK LOGIC IN FINAL CODE
+
+- No fake data in production paths
+- No hardcoded IDs
+- No temporary logic left behind
+- All configs must come from DB or validated input
+- No demo-only assumptions inside production flows
+
+---
+
+# DATABASE RULES
+
+## 1. KEYS AND TIMESTAMPS
+- Use UUIDs for all primary keys
+- Always include created_at timestamps
+- Include updated_at where records are edited over time
+
+## 2. RELATIONSHIPS
+- Use proper foreign key relationships
+- Preserve referential integrity
+- Add indexes for common filters and joins
+
+## 3. SNAPSHOT RULE
+- Runtime sessions must store immutable snapshots of resolved config and selected questions
+- Runtime must not depend on live mutable shell state once play begins
+
+## 4. REVIEW / AUDIT SUPPORT
+- Persist review state where needed
+- Persist import batch history
+- Persist webhook logs
+- Persist shell status transitions where applicable
+
+## 5. DERIVED VALUES
+- Do not store derived values unless needed for performance, auditability, or runtime stability
+
+---
+
+# API DESIGN RULES
+
+## 1. CONSISTENT ROUTING
+Keep route naming RESTful and consistent.
+
+Runtime examples:
+- POST /trivia/start
+- GET /trivia/{id}/next
+- POST /trivia/{id}/answer
+- POST /trivia/{id}/complete
+
+Authoring examples should also be consistent and resource-oriented.
+
+## 2. RESPONSE SHAPE
+Always return structured JSON:
+
+{
+  "success": true,
+  "data": {},
+  "error": null
+}
+
+Errors:
+
+{
+  "success": false,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human readable message"
+  }
+}
+
+## 3. NEVER RETURN RAW DATABASE OBJECTS
+Map responses intentionally.
+
+---
+
+# RUNTIME RULES
+
+## 1. SESSION IS SOURCE OF TRUTH
+- All gameplay must be driven from server-side session state
+- Never trust frontend state
+
+## 2. IMMUTABLE QUESTION SET
+Once a session starts:
+- question set must not change
+- resolved config must not change for that session
+- gameplay runs from snapshot only
+
+## 3. ANSWER VALIDATION
+- Must be server-side only
+- Never trust client-submitted correctness
+
+## 4. TIMER ENFORCEMENT
+- Must be enforced server-side
+- Frontend timer is only visual
+
+## 5. FULL-SET RESOLUTION
+For randomized play:
+- build the full question set before gameplay proceeds
+- do not select questions one-by-one during play
+
+---
+
+# AUTHORING / ADMIN RULES
+
+## 1. SHELL-FIRST MODEL
+A shell is the reusable base template for a trivia experience.
+
+Authoring owns:
+- shell metadata
+- shell defaults
+- shell theme/screen config
+- fixed question attachment
+- validation state
+
+Do not let campaign overrides mutate the shell itself.
+
+## 2. QUESTION BANK MODEL
+Questions live in a reusable bank.
+Questions may be attached to shells, but do not belong only to a single shell by default.
+
+## 3. IMPORT MODEL
+CSV and webhook imports must:
+- validate input
+- create import logs/batches
+- land questions in review state
+- avoid auto-publishing
+
+## 4. REVIEW MODEL
+Imported questions must support review/approval workflow before use.
+
+## 5. MOBILE-FIRST PRESENTATION
+Do not build a freeform drag-and-drop page builder.
+Use a constrained theme/config model.
+
+---
+
+# PLATFORM BOUNDARY RULES
+
+The external platform owns:
+- campaigns
+- campaign_game_instances
+- leads
+- rewards
+- redemption
+- CTA content
+- lead field rules
+- campaign-level overrides
+
+This Trivia app owns:
+- shells
+- question bank
+- answers
+- difficulty
+- shell defaults
+- visual presentation config
+- runtime execution
+
+Do not absorb platform responsibilities into Trivia.
+
+---
+
+# FRONTEND SUPPORT RULES
+
+This application powers a mobile-first trivia experience and an internal admin interface.
+
+## Runtime responses must include everything needed for gameplay rendering, including where appropriate:
+- question text
+- answers
+- correctness feedback
+- explanation
+- timer info
+- UI config
+- background config
+- score/result data
+
+Never assume the runtime frontend will “figure it out.”
+
+## Authoring responses must include everything needed for management workflows, including where appropriate:
+- validation state
+- review state
+- import status
+- visibility state
+- shell configuration data
+
+---
+
+# ERROR HANDLING
+
+- Use consistent structured errors everywhere
+- Distinguish validation errors from system errors
+- Fail safely
+- Log integration failures appropriately
+- Do not fail silently on important writes or import processing
+
+---
+
+# DATA INTEGRITY
+
+- Prevent duplicate session answers
+- Prevent invalid session transitions
+- Enforce exactly one correct answer per question
+- Prevent shell/question ordering corruption
+- Preserve review history
+- Do not store lead PII in Trivia as a source of truth
+
+---
+
+# PERFORMANCE RULES
+
+- Minimize DB queries
+- Use indexes for common filters
+- Avoid N+1 queries
+- Do not make runtime repeatedly fetch live authoring data per question
+- Use snapshots for runtime stability and performance
+- Keep import/review flows efficient but safe
+
+---
+
+# TESTABILITY
+
+All logic must be:
+- deterministic where possible
+- testable
+- modular
+- separable by concern
+
+Validation logic, selection logic, and scoring logic must not be tightly coupled to UI code.
+
+---
+
+# NAMING CONSISTENCY
+
+Use consistent naming across:
+- DB tables
+- API routes
+- services
+- variables
+- types
+
+Do not rename concepts mid-build.
+
+Examples:
+- trivia_game_sessions
+- trivia_session_answers
+- trivia_shells
+- trivia_question_import_batches
+
+---
+
+# DO NOT
+
+- Do not invent new systems outside scope
+- Do not add platform-side campaign editing here
+- Do not add reward or redemption ownership here
+- Do not add client-facing quiz authoring
+- Do not build a drag-and-drop page builder
+- Do not implement video/GIF-heavy presentation for v1
+- Do not combine unrelated responsibilities
+
+---
+
+# DECISION RULE
+
+Before implementing anything, ask:
+
+1. Does this belong to Trivia at all?
+2. If yes, does it belong to Runtime or Authoring/Admin?
+3. If it belongs to the platform, do not build it here.
+
+---
+
+# GOAL
+
+Build a clean, scalable, production-ready Trivia application with:
+- a stable Runtime layer
+- a well-bounded Authoring/Admin layer
+- strict separation from the external platform
+
+No hacks. No shortcuts. No drift.
