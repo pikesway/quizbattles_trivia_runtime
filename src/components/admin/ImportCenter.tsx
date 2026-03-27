@@ -147,6 +147,9 @@ export function ImportCenter() {
 
     const headers = lines[0].split(',').map(h => h.toLowerCase().trim().replace(/"/g, ''));
 
+    const hasCorrectAnswerColumn = headers.includes('correct answer');
+    const hasOptionColumns = headers.some(h => h.startsWith('option '));
+
     const questions = [];
     let firstTopic = 'Imported';
 
@@ -160,17 +163,34 @@ export function ImportCenter() {
       }
 
       const answers = [];
-      for (let j = 1; j <= 4; j++) {
-        const text = row[`answer_${j}`];
-        const isCorrect = ['true', '1', 'yes', 'y'].includes((row[`answer_${j}_is_correct`] || '').toLowerCase());
-        if (text && text.trim()) {
-          answers.push({ text: text.trim(), is_correct: isCorrect });
+
+      if (hasCorrectAnswerColumn && hasOptionColumns) {
+        const correctAnswerNum = parseInt(row['correct answer'] || '0', 10);
+        for (let j = 1; j <= 4; j++) {
+          const text = row[`option ${j}`];
+          if (text && text.trim()) {
+            answers.push({ text: text.trim(), is_correct: j === correctAnswerNum });
+          }
+        }
+      } else {
+        for (let j = 1; j <= 4; j++) {
+          const text = row[`answer_${j}`];
+          const isCorrect = ['true', '1', 'yes', 'y'].includes((row[`answer_${j}_is_correct`] || '').toLowerCase());
+          if (text && text.trim()) {
+            answers.push({ text: text.trim(), is_correct: isCorrect });
+          }
         }
       }
 
-      if (row.question && row.question.trim() && answers.length >= 2) {
+      const questionText = row.question || '';
+      if (questionText.trim() && answers.length >= 2) {
+        const hasCorrectAnswer = answers.some(a => a.is_correct);
+        if (!hasCorrectAnswer && answers.length > 0) {
+          answers[0].is_correct = true;
+        }
+
         questions.push({
-          question: row.question.trim(),
+          question: questionText.trim(),
           explanation: row.explanation?.trim() || '',
           difficulty: (row.difficulty?.toLowerCase().trim() || 'medium') as 'easy' | 'medium' | 'hard',
           answers,
@@ -308,10 +328,16 @@ export function ImportCenter() {
               )}
 
               <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                <h4 className="font-medium text-gray-900 mb-2">CSV Format Example</h4>
+                <h4 className="font-medium text-gray-900 mb-2">CSV Format Examples</h4>
+                <p className="text-xs text-gray-500 mb-2">Format 1: With "Correct Answer" column (1-4 indicates which option)</p>
+                <pre className="text-xs text-gray-600 overflow-x-auto mb-3">
+{`topic,Question,Explanation,Correct Answer,Option 1,Option 2,Option 3,Option 4
+Science,"What is H2O?","Water is H2O",1,Water,Fire,Air,Earth`}
+                </pre>
+                <p className="text-xs text-gray-500 mb-2">Format 2: With separate is_correct columns</p>
                 <pre className="text-xs text-gray-600 overflow-x-auto">
-{`topic,question,explanation,difficulty,answer_1,answer_1_is_correct,answer_2,answer_2_is_correct,answer_3,answer_3_is_correct,answer_4,answer_4_is_correct
-Science,"What is H2O?","Water is H2O",easy,Water,true,Fire,false,Air,false,Earth,false`}
+{`topic,question,explanation,difficulty,answer_1,answer_1_is_correct,answer_2,answer_2_is_correct
+Science,"What is H2O?","Water is H2O",easy,Water,true,Fire,false`}
                 </pre>
               </div>
             </div>
