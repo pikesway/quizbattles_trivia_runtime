@@ -110,7 +110,14 @@ export function ImportCenter() {
 
       const data = await response.json();
       if (!response.ok || !data.success) {
-        throw new Error(data.error?.message || 'Import failed');
+        const details = data.error?.details;
+        let errorMsg = data.error?.message || 'Import failed';
+        if (details && Array.isArray(details) && details.length > 0) {
+          errorMsg += ': ' + details.map((d: { field?: string; message: string }) =>
+            d.field ? `${d.field} - ${d.message}` : d.message
+          ).join(', ');
+        }
+        throw new Error(errorMsg);
       }
 
       setUploadResult({
@@ -141,10 +148,16 @@ export function ImportCenter() {
     const headers = lines[0].split(',').map(h => h.toLowerCase().trim().replace(/"/g, ''));
 
     const questions = [];
+    let firstTopic = 'Imported';
+
     for (let i = 1; i < lines.length; i++) {
       const values = parseCSVLine(lines[i]);
       const row: Record<string, string> = {};
       headers.forEach((h, j) => { row[h] = values[j] || ''; });
+
+      if (i === 1 && row.topic && row.topic.trim()) {
+        firstTopic = row.topic.trim();
+      }
 
       const answers = [];
       for (let j = 1; j <= 4; j++) {
@@ -155,7 +168,7 @@ export function ImportCenter() {
         }
       }
 
-      if (row.question && answers.length >= 2) {
+      if (row.question && row.question.trim() && answers.length >= 2) {
         questions.push({
           question: row.question.trim(),
           explanation: row.explanation?.trim() || '',
@@ -165,9 +178,13 @@ export function ImportCenter() {
       }
     }
 
+    if (questions.length === 0) {
+      throw new Error('No valid questions found in CSV. Ensure each row has a question and at least 2 answers.');
+    }
+
     return {
       source: `csv-upload:${filename}`,
-      topic: questions[0]?.question ? (lines[1].split(',')[0]?.replace(/"/g, '') || 'Imported') : 'Imported',
+      topic: firstTopic,
       tags: [],
       questions,
     };
