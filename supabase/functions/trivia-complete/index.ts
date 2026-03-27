@@ -100,12 +100,20 @@ Deno.serve(async (req: Request) => {
     }
 
     if (session.status === 'completed') {
+      const endScreenRules = session.config?.end_screen_rules || DEFAULT_END_SCREEN_RULES;
+      const message = getEndScreenMessage(session.score, endScreenRules);
+
       return new Response(
         JSON.stringify({
-          success: false,
-          error: { code: 'SESSION_ALREADY_COMPLETED', message: 'Session is already completed' },
+          success: true,
+          data: {
+            score: session.score,
+            total: session.total_questions,
+            message,
+            correct_answers: session.correct_answers,
+          },
         }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
