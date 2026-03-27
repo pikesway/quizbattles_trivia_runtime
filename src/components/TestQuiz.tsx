@@ -202,7 +202,7 @@ export function TestQuiz({ token }: TestQuizProps) {
         .eq('difficulty_level', level);
 
       if (shellData.topic) {
-        query = query.eq('topic', shellData.topic);
+        query = query.ilike('topic', shellData.topic.trim());
       }
 
       const { data: levelQuestions } = await query.limit(needed * 3);

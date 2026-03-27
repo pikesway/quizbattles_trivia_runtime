@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Archive, Copy, CreditCard as Edit2, ChevronDown, Play, Link2, QrCode, X } from 'lucide-react';
+import { Plus, Search, Archive, Copy, CreditCard as Edit2, ChevronDown, Play, Link2, X } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../../lib/supabase';
 
 interface Shell {
@@ -382,8 +383,8 @@ export function ShellList({ onSelectShell, onCreateShell }: ShellListProps) {
 
                   <div className="flex items-center justify-center p-4 bg-gray-50 rounded-lg">
                     <div className="text-center">
-                      <div className="w-32 h-32 bg-white border border-gray-200 rounded-lg mx-auto mb-2 flex items-center justify-center">
-                        <QrCode className="w-24 h-24 text-gray-800" />
+                      <div className="bg-white p-2 rounded-lg inline-block mb-2">
+                        <QRCodeSVG value={getTestUrl()} size={128} />
                       </div>
                       <p className="text-xs text-gray-500">QR Code for test link</p>
                     </div>
