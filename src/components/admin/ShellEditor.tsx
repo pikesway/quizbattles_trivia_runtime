@@ -100,18 +100,21 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
     setValidationError(null);
 
     try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
 
-      const response = await fetch(`/api/admin/shells/${shell.id}/validate`, {
+      const response = await fetch(`${supabaseUrl}/functions/v1/admin-shells/${shell.id}/validate`, {
+        method: 'GET',
         headers: {
-          'Authorization': token ? `Bearer ${token}` : '',
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch validation data');
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData?.error?.message || 'Failed to fetch validation data');
       }
 
       const result = await response.json();

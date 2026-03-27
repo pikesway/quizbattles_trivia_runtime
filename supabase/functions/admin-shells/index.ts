@@ -32,8 +32,102 @@ Deno.serve(async (req: Request) => {
 
     const url = new URL(req.url);
     const pathParts = url.pathname.split('/').filter(Boolean);
-    const shellId = pathParts[pathParts.length - 1];
+    const lastPart = pathParts[pathParts.length - 1];
+    const secondLastPart = pathParts[pathParts.length - 2];
+
+    const isValidateRoute = lastPart === 'validate' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(secondLastPart);
+    const shellId = isValidateRoute ? secondLastPart : lastPart;
     const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(shellId);
+
+    if (req.method === 'GET' && isValidateRoute) {
+      const { data: shell, error: shellError } = await supabase
+        .from('trivia_shells')
+        .select('*')
+        .eq('id', shellId)
+        .maybeSingle();
+
+      if (shellError) throw shellError;
+      if (!shell) {
+        return new Response(
+          JSON.stringify(errorResponse('NOT_FOUND', 'Shell not found')),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const blockingErrors: Array<{ code: string; message: string; field?: string }> = [];
+      const warnings: Array<{ code: string; message: string; field?: string }> = [];
+
+      if (!shell.internal_name || shell.internal_name.trim() === '') {
+        blockingErrors.push({ code: 'MISSING_NAME', message: 'Internal name is required', field: 'internal_name' });
+      }
+      if (!shell.slug || shell.slug.trim() === '') {
+        blockingErrors.push({ code: 'MISSING_SLUG', message: 'Slug is required', field: 'slug' });
+      }
+
+      const diffMix = shell.default_difficulty_mix || { easy: 0, medium: 0, hard: 0 };
+      const total = (diffMix.easy || 0) + (diffMix.medium || 0) + (diffMix.hard || 0);
+      if (total !== 100) {
+        blockingErrors.push({ code: 'INVALID_DIFFICULTY_MIX', message: `Difficulty mix must total 100% (currently ${total}%)`, field: 'default_difficulty_mix' });
+      }
+
+      if (!shell.config?.backgrounds?.default && !shell.config?.theme) {
+        warnings.push({ code: 'NO_THEME', message: 'No theme or background configured', field: 'config.theme' });
+      }
+
+      const questionCount = shell.default_question_count || 10;
+      const easyNeeded = Math.round(questionCount * ((diffMix.easy || 0) / 100));
+      const mediumNeeded = Math.round(questionCount * ((diffMix.medium || 0) / 100));
+      const hardNeeded = Math.round(questionCount * ((diffMix.hard || 0) / 100));
+
+      const { data: approvedCounts } = await supabase.rpc('count_questions_by_difficulty', { p_shell_id: shellId });
+
+      let easyCount = 0, mediumCount = 0, hardCount = 0;
+      if (approvedCounts && Array.isArray(approvedCounts)) {
+        for (const row of approvedCounts) {
+          if (row.difficulty_level === 'easy') easyCount = row.count;
+          if (row.difficulty_level === 'medium') mediumCount = row.count;
+          if (row.difficulty_level === 'hard') hardCount = row.count;
+        }
+      } else {
+        const { count: easyC } = await supabase.from('trivia_questions').select('*', { count: 'exact', head: true }).eq('review_state', 'approved').eq('difficulty_level', 'easy');
+        const { count: mediumC } = await supabase.from('trivia_questions').select('*', { count: 'exact', head: true }).eq('review_state', 'approved').eq('difficulty_level', 'medium');
+        const { count: hardC } = await supabase.from('trivia_questions').select('*', { count: 'exact', head: true }).eq('review_state', 'approved').eq('difficulty_level', 'hard');
+        easyCount = easyC || 0;
+        mediumCount = mediumC || 0;
+        hardCount = hardC || 0;
+      }
+
+      const totalApproved = easyCount + mediumCount + hardCount;
+      const easyShortage = Math.max(0, easyNeeded - easyCount);
+      const mediumShortage = Math.max(0, mediumNeeded - mediumCount);
+      const hardShortage = Math.max(0, hardNeeded - hardCount);
+      const sufficient = easyShortage === 0 && mediumShortage === 0 && hardShortage === 0;
+
+      if (!sufficient) {
+        blockingErrors.push({ code: 'INSUFFICIENT_QUESTIONS', message: 'Not enough approved questions to meet difficulty requirements' });
+      }
+
+      const validationResult = {
+        validation: {
+          is_valid: blockingErrors.length === 0,
+          blocking_errors: blockingErrors,
+          warnings: warnings,
+        },
+        question_supply: {
+          total_approved: totalApproved,
+          by_difficulty: { easy: easyCount, medium: mediumCount, hard: hardCount },
+          needed: { easy: easyNeeded, medium: mediumNeeded, hard: hardNeeded, total: questionCount },
+          sufficient,
+          shortages: { easy: easyShortage, medium: mediumShortage, hard: hardShortage },
+        },
+        mobile_fit_warnings: [],
+      };
+
+      return new Response(
+        JSON.stringify(successResponse(validationResult)),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     if (req.method === 'GET') {
       if (isValidUUID) {
