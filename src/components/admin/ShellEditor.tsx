@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Save, AlertTriangle, CheckCircle, Smartphone, RefreshCw, XCircle, Play, Link2, QrCode, X, ChevronDown, ChevronUp, Maximize2 } from 'lucide-react';
+import { ArrowLeft, Save, AlertTriangle, CheckCircle, Smartphone, RefreshCw, XCircle, Play, Link2, X, ChevronDown, ChevronUp, Maximize2 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../../lib/supabase';
 import { ImageInput } from './ImageInput';
 
@@ -603,49 +604,84 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
                 <select
                   value={formData.topic || ''}
                   onChange={e => updateFormData('topic', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    formData.topic && !availableTopics.some(t => t.topic === formData.topic)
+                      ? 'border-orange-400 bg-orange-50'
+                      : 'border-gray-200'
+                  }`}
                 >
                   <option value="">-- Select a topic --</option>
+                  {formData.topic && !availableTopics.some(t => t.topic === formData.topic) && (
+                    <option value={formData.topic}>{formData.topic} (0 questions - no longer available)</option>
+                  )}
                   {availableTopics.map(opt => (
                     <option key={opt.topic} value={opt.topic}>
                       {opt.topic} ({opt.count} questions)
                     </option>
                   ))}
                 </select>
-                {availableTopics.length === 0 && (
+                {availableTopics.length === 0 && !formData.topic && (
                   <p className="text-xs text-gray-500 mt-1">No topics available. Add questions with topics first.</p>
+                )}
+                {formData.topic && !availableTopics.some(t => t.topic === formData.topic) && (
+                  <p className="text-xs text-orange-600 mt-1">This topic no longer has any approved questions. Select a different topic.</p>
                 )}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
-                {availableTags.length > 0 ? (
-                  <div className="border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto">
-                    <div className="space-y-2">
-                      {availableTags.map(opt => (
-                        <label key={opt.tag} className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={(formData.tags || []).includes(opt.tag)}
-                            onChange={e => {
-                              const currentTags = formData.tags || [];
-                              if (e.target.checked) {
-                                updateFormData('tags', [...currentTags, opt.tag]);
-                              } else {
-                                updateFormData('tags', currentTags.filter(t => t !== opt.tag));
-                              }
-                            }}
-                            className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                          />
-                          <span className="text-sm text-gray-700">{opt.tag}</span>
-                          <span className="text-xs text-gray-400">({opt.count})</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500">No tags available. Add questions with tags first.</p>
-                )}
+                {(() => {
+                  const unavailableTags = (formData.tags || []).filter(t => !availableTags.some(at => at.tag === t));
+                  return (
+                    <>
+                      {(availableTags.length > 0 || unavailableTags.length > 0) ? (
+                        <div className="border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto">
+                          <div className="space-y-2">
+                            {unavailableTags.map(tag => (
+                              <label key={tag} className="flex items-center gap-2 cursor-pointer bg-orange-50 -mx-1 px-1 py-0.5 rounded">
+                                <input
+                                  type="checkbox"
+                                  checked={true}
+                                  onChange={() => {
+                                    const currentTags = formData.tags || [];
+                                    updateFormData('tags', currentTags.filter(t => t !== tag));
+                                  }}
+                                  className="w-4 h-4 text-orange-600 rounded border-orange-300 focus:ring-orange-500"
+                                />
+                                <span className="text-sm text-orange-700">{tag}</span>
+                                <span className="text-xs text-orange-500">(0 - unavailable)</span>
+                              </label>
+                            ))}
+                            {availableTags.map(opt => (
+                              <label key={opt.tag} className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={(formData.tags || []).includes(opt.tag)}
+                                  onChange={e => {
+                                    const currentTags = formData.tags || [];
+                                    if (e.target.checked) {
+                                      updateFormData('tags', [...currentTags, opt.tag]);
+                                    } else {
+                                      updateFormData('tags', currentTags.filter(t => t !== opt.tag));
+                                    }
+                                  }}
+                                  className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                />
+                                <span className="text-sm text-gray-700">{opt.tag}</span>
+                                <span className="text-xs text-gray-400">({opt.count})</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500">No tags available. Add questions with tags first.</p>
+                      )}
+                      {unavailableTags.length > 0 && (
+                        <p className="text-xs text-orange-600 mt-1">Some selected tags no longer have approved questions.</p>
+                      )}
+                    </>
+                  );
+                })()}
                 {(formData.tags || []).length > 0 && (
                   <p className="text-xs text-gray-500 mt-1">
                     Selected: {(formData.tags || []).join(', ')}
@@ -1537,8 +1573,8 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
 
               <div className="flex items-center justify-center p-4 bg-gray-50 rounded-lg">
                 <div className="text-center">
-                  <div className="w-32 h-32 bg-white border border-gray-200 rounded-lg mx-auto mb-2 flex items-center justify-center">
-                    <QrCode className="w-24 h-24 text-gray-800" />
+                  <div className="bg-white p-2 rounded-lg inline-block mb-2">
+                    <QRCodeSVG value={getTestUrl()} size={128} />
                   </div>
                   <p className="text-xs text-gray-500">QR Code for test link</p>
                 </div>

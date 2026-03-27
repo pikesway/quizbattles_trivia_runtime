@@ -201,8 +201,11 @@ export function TestQuiz({ token }: TestQuizProps) {
         .eq('review_state', 'approved')
         .eq('difficulty_level', level);
 
-      if (shellData.topic) {
-        query = query.ilike('topic', shellData.topic.trim());
+      if (shellData.topic && shellData.topic.trim()) {
+        query = query.eq('topic', shellData.topic.trim());
+      }
+      if (shellData.tags && shellData.tags.length > 0) {
+        query = query.overlaps('tags', shellData.tags);
       }
 
       const { data: levelQuestions } = await query.limit(needed * 3);
@@ -357,7 +360,7 @@ export function TestQuiz({ token }: TestQuizProps) {
 
   if (screen === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-gray-900">
         <div className="text-white text-center">
           <div className="animate-spin w-8 h-8 border-2 border-white border-t-transparent rounded-full mx-auto mb-4" />
           <p>Loading test quiz...</p>
@@ -368,8 +371,8 @@ export function TestQuiz({ token }: TestQuizProps) {
 
   if (screen === 'error') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900 p-4">
-        <div className="bg-white rounded-lg p-6 max-w-md text-center">
+      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-gray-900 p-4">
+        <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 text-center">
           <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-gray-900 mb-2">Unable to Load Quiz</h2>
           <p className="text-gray-600">{error}</p>
@@ -380,7 +383,7 @@ export function TestQuiz({ token }: TestQuizProps) {
 
   return (
     <div
-      className="min-h-screen flex flex-col"
+      className="min-h-screen min-h-[100dvh] flex flex-col overflow-x-hidden"
       style={{
         backgroundImage: `url(${getBackground()})`,
         backgroundSize: 'cover',
@@ -388,14 +391,14 @@ export function TestQuiz({ token }: TestQuizProps) {
         fontFamily: theme?.font_family || 'Inter',
       }}
     >
-      <div className="absolute top-4 left-4 z-10">
+      <div className="absolute top-4 left-4 z-10 safe-area-inset-left">
         <span className="px-3 py-1 bg-orange-500 text-white text-xs font-medium rounded-full">
           TEST MODE
         </span>
       </div>
 
       <div
-        className="flex-1 flex flex-col items-center justify-center p-4"
+        className="flex-1 flex flex-col items-center justify-center px-4 py-6 safe-area-inset-bottom"
         style={{ backgroundColor: theme?.overlay_tint || 'rgba(0,0,0,0.5)' }}
       >
         {screen === 'start' && screens && (
@@ -426,7 +429,7 @@ export function TestQuiz({ token }: TestQuizProps) {
         )}
 
         {screen === 'game' && session && (
-          <div className="w-full max-w-lg">
+          <div className="w-full max-w-lg px-2">
             <div className="mb-6">
               <div
                 className="flex justify-between text-sm mb-2"
