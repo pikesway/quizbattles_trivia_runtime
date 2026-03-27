@@ -1,9 +1,10 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { verifyAdminAuth } from '../_shared/adminAuth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey, X-Api-Key',
 };
 
 interface WebhookAnswer {
@@ -44,19 +45,26 @@ function errorResponse(code: string, message: string, details?: unknown) {
   return { success: false, error: { code, message, details } };
 }
 
-function verifyApiKey(req: Request): { valid: boolean; error?: string } {
+async function verifyAuth(req: Request): Promise<{ valid: boolean; sourceType: 'webhook' | 'csv'; error?: string }> {
   const apiKey = req.headers.get('X-Api-Key');
   const expectedApiKey = Deno.env.get('WEBHOOK_API_KEY');
 
-  if (!expectedApiKey) {
-    return { valid: false, error: 'Webhook API key not configured on server' };
+  if (apiKey) {
+    if (!expectedApiKey) {
+      return { valid: false, sourceType: 'webhook', error: 'Webhook API key not configured on server' };
+    }
+    if (apiKey !== expectedApiKey) {
+      return { valid: false, sourceType: 'webhook', error: 'Invalid API key' };
+    }
+    return { valid: true, sourceType: 'webhook' };
   }
 
-  if (!apiKey || apiKey !== expectedApiKey) {
-    return { valid: false, error: 'Invalid or missing API key' };
+  const authResult = await verifyAdminAuth(req);
+  if (authResult.adminProfile) {
+    return { valid: true, sourceType: 'csv' };
   }
 
-  return { valid: true };
+  return { valid: false, sourceType: 'webhook', error: 'Authentication required (provide X-Api-Key header or admin Bearer token)' };
 }
 
 function validatePayload(payload: WebhookPayload): ValidationError[] {
@@ -143,7 +151,7 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  const { valid, error: authError } = verifyApiKey(req);
+  const { valid, sourceType, error: authError } = await verifyAuth(req);
   if (!valid) {
     return new Response(
       JSON.stringify(errorResponse('UNAUTHORIZED', authError || 'Authentication required')),
@@ -189,7 +197,7 @@ Deno.serve(async (req: Request) => {
     const { data: batch, error: batchError } = await supabase
       .from('trivia_question_import_batches')
       .insert({
-        source_type: 'webhook',
+        source_type: sourceType,
         source_identifier: payload.source,
         shell_slug: payload.shell_slug || null,
         total_items: payload.questions.length,
@@ -229,7 +237,7 @@ Deno.serve(async (req: Request) => {
             difficulty: difficultyToNumeric(webhookQuestion.difficulty),
             difficulty_level: webhookQuestion.difficulty,
             review_state: 'pending_review',
-            source_type: 'webhook',
+            source_type: sourceType,
             source_batch_id: batch.id,
             external_question_id: webhookQuestion.external_question_id || null,
             is_active: webhookQuestion.active !== false,
