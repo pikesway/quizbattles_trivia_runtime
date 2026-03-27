@@ -113,6 +113,16 @@ const DIFFICULTY_PRESETS = {
 
 type TabId = 'basics' | 'defaults' | 'theme' | 'screens' | 'preview' | 'validation';
 
+interface TopicOption {
+  topic: string;
+  count: number;
+}
+
+interface TagOption {
+  tag: string;
+  count: number;
+}
+
 export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
   const [activeTab, setActiveTab] = useState<TabId>('basics');
   const [formData, setFormData] = useState<Partial<Shell>>({});
@@ -126,6 +136,10 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
   const [showTestLinkModal, setShowTestLinkModal] = useState(false);
   const [testToken, setTestToken] = useState<string | null>(null);
   const [generatingToken, setGeneratingToken] = useState(false);
+  const [availableTopics, setAvailableTopics] = useState<TopicOption[]>([]);
+  const [availableTags, setAvailableTags] = useState<TagOption[]>([]);
+  const [matchingQuestionCount, setMatchingQuestionCount] = useState<number | null>(null);
+  const [loadingMatchCount, setLoadingMatchCount] = useState(false);
 
   const fetchValidation = useCallback(async () => {
     if (!shell?.id) return;
@@ -169,6 +183,90 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
       fetchValidation();
     }
   }, [activeTab, shell?.id, fetchValidation]);
+
+  useEffect(() => {
+    async function fetchTopicsAndTags() {
+      const { data: topicData } = await supabase
+        .from('trivia_questions')
+        .select('topic')
+        .eq('is_active', true)
+        .eq('review_state', 'approved')
+        .not('topic', 'is', null)
+        .neq('topic', '');
+
+      if (topicData) {
+        const topicCounts = topicData.reduce((acc: Record<string, number>, row) => {
+          const t = row.topic as string;
+          acc[t] = (acc[t] || 0) + 1;
+          return acc;
+        }, {});
+        const topics = Object.entries(topicCounts)
+          .map(([topic, count]) => ({ topic, count }))
+          .sort((a, b) => a.topic.localeCompare(b.topic));
+        setAvailableTopics(topics);
+      }
+
+      const { data: tagData } = await supabase
+        .from('trivia_questions')
+        .select('tags')
+        .eq('is_active', true)
+        .eq('review_state', 'approved')
+        .not('tags', 'is', null);
+
+      if (tagData) {
+        const tagCounts: Record<string, number> = {};
+        tagData.forEach(row => {
+          const tags = row.tags as string[];
+          if (tags) {
+            tags.forEach(tag => {
+              tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+            });
+          }
+        });
+        const tags = Object.entries(tagCounts)
+          .map(([tag, count]) => ({ tag, count }))
+          .sort((a, b) => a.tag.localeCompare(b.tag));
+        setAvailableTags(tags);
+      }
+    }
+    fetchTopicsAndTags();
+  }, []);
+
+  useEffect(() => {
+    async function fetchMatchingCount() {
+      const topic = formData.topic;
+      const tags = formData.tags || [];
+
+      if (!topic && tags.length === 0) {
+        setMatchingQuestionCount(null);
+        return;
+      }
+
+      setLoadingMatchCount(true);
+      try {
+        let query = supabase
+          .from('trivia_questions')
+          .select('*', { count: 'exact', head: true })
+          .eq('is_active', true)
+          .eq('review_state', 'approved');
+
+        if (topic) {
+          query = query.eq('topic', topic);
+        }
+        if (tags.length > 0) {
+          query = query.overlaps('tags', tags);
+        }
+
+        const { count } = await query;
+        setMatchingQuestionCount(count || 0);
+      } catch {
+        setMatchingQuestionCount(null);
+      } finally {
+        setLoadingMatchCount(false);
+      }
+    }
+    fetchMatchingCount();
+  }, [formData.topic, formData.tags]);
 
   useEffect(() => {
     if (shell) {
@@ -464,7 +562,16 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                   <select
                     value={formData.status || 'draft'}
-                    onChange={e => updateFormData('status', e.target.value)}
+                    onChange={e => {
+                      const newStatus = e.target.value;
+                      const hasTopic = formData.topic && formData.topic.trim().length > 0;
+                      const hasTags = formData.tags && formData.tags.length > 0;
+                      if (newStatus !== 'draft' && !hasTopic && !hasTags) {
+                        alert('Topic or Tags must be selected to move beyond draft status.');
+                        return;
+                      }
+                      updateFormData('status', newStatus);
+                    }}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="draft">Draft</option>
@@ -493,23 +600,85 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Topic</label>
-                <input
-                  type="text"
+                <select
                   value={formData.topic || ''}
                   onChange={e => updateFormData('topic', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                >
+                  <option value="">-- Select a topic --</option>
+                  {availableTopics.map(opt => (
+                    <option key={opt.topic} value={opt.topic}>
+                      {opt.topic} ({opt.count} questions)
+                    </option>
+                  ))}
+                </select>
+                {availableTopics.length === 0 && (
+                  <p className="text-xs text-gray-500 mt-1">No topics available. Add questions with topics first.</p>
+                )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
-                <input
-                  type="text"
-                  value={(formData.tags || []).join(', ')}
-                  onChange={e => updateFormData('tags', e.target.value.split(',').map(t => t.trim()).filter(Boolean))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
+                {availableTags.length > 0 ? (
+                  <div className="border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto">
+                    <div className="space-y-2">
+                      {availableTags.map(opt => (
+                        <label key={opt.tag} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={(formData.tags || []).includes(opt.tag)}
+                            onChange={e => {
+                              const currentTags = formData.tags || [];
+                              if (e.target.checked) {
+                                updateFormData('tags', [...currentTags, opt.tag]);
+                              } else {
+                                updateFormData('tags', currentTags.filter(t => t !== opt.tag));
+                              }
+                            }}
+                            className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-gray-700">{opt.tag}</span>
+                          <span className="text-xs text-gray-400">({opt.count})</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">No tags available. Add questions with tags first.</p>
+                )}
+                {(formData.tags || []).length > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Selected: {(formData.tags || []).join(', ')}
+                  </p>
+                )}
               </div>
+
+              {(formData.topic || (formData.tags || []).length > 0) && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    {loadingMatchCount ? (
+                      <span className="text-sm text-blue-700">Counting matching questions...</span>
+                    ) : (
+                      <span className="text-sm text-blue-700">
+                        <strong>{matchingQuestionCount}</strong> approved questions match current filters
+                      </span>
+                    )}
+                  </div>
+                  {matchingQuestionCount !== null && matchingQuestionCount < (formData.default_question_count || 10) && (
+                    <p className="text-xs text-orange-600 mt-1">
+                      Warning: You need {formData.default_question_count || 10} questions but only {matchingQuestionCount} match.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {!formData.topic && (formData.tags || []).length === 0 && formData.status !== 'draft' && (
+                <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                  <p className="text-sm text-orange-700">
+                    Either Topic or Tags must be selected to move beyond draft status.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

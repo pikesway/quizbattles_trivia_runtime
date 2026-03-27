@@ -74,28 +74,39 @@ Deno.serve(async (req: Request) => {
         warnings.push({ code: 'NO_THEME', message: 'No theme or background configured', field: 'config.theme' });
       }
 
+      const hasTopic = shell.topic && shell.topic.trim().length > 0;
+      const hasTags = shell.tags && shell.tags.length > 0;
+      if (shell.status !== 'draft' && !hasTopic && !hasTags) {
+        blockingErrors.push({ code: 'MISSING_TOPIC_OR_TAGS', message: 'Either Topic or Tags must be specified to move beyond draft status', field: 'topic' });
+      }
+
       const questionCount = shell.default_question_count || 10;
       const easyNeeded = Math.round(questionCount * ((diffMix.easy || 0) / 100));
       const mediumNeeded = Math.round(questionCount * ((diffMix.medium || 0) / 100));
       const hardNeeded = Math.round(questionCount * ((diffMix.hard || 0) / 100));
 
-      const { data: approvedCounts } = await supabase.rpc('count_questions_by_difficulty', { p_shell_id: shellId });
+      async function countByDifficulty(difficulty: string): Promise<number> {
+        let query = supabase
+          .from('trivia_questions')
+          .select('*', { count: 'exact', head: true })
+          .eq('is_active', true)
+          .eq('review_state', 'approved')
+          .eq('difficulty_level', difficulty);
 
-      let easyCount = 0, mediumCount = 0, hardCount = 0;
-      if (approvedCounts && Array.isArray(approvedCounts)) {
-        for (const row of approvedCounts) {
-          if (row.difficulty_level === 'easy') easyCount = row.count;
-          if (row.difficulty_level === 'medium') mediumCount = row.count;
-          if (row.difficulty_level === 'hard') hardCount = row.count;
+        if (hasTopic) {
+          query = query.eq('topic', shell.topic);
         }
-      } else {
-        const { count: easyC } = await supabase.from('trivia_questions').select('*', { count: 'exact', head: true }).eq('review_state', 'approved').eq('difficulty_level', 'easy');
-        const { count: mediumC } = await supabase.from('trivia_questions').select('*', { count: 'exact', head: true }).eq('review_state', 'approved').eq('difficulty_level', 'medium');
-        const { count: hardC } = await supabase.from('trivia_questions').select('*', { count: 'exact', head: true }).eq('review_state', 'approved').eq('difficulty_level', 'hard');
-        easyCount = easyC || 0;
-        mediumCount = mediumC || 0;
-        hardCount = hardC || 0;
+        if (hasTags) {
+          query = query.overlaps('tags', shell.tags);
+        }
+
+        const { count } = await query;
+        return count || 0;
       }
+
+      const easyCount = await countByDifficulty('easy');
+      const mediumCount = await countByDifficulty('medium');
+      const hardCount = await countByDifficulty('hard');
 
       const totalApproved = easyCount + mediumCount + hardCount;
       const easyShortage = Math.max(0, easyNeeded - easyCount);

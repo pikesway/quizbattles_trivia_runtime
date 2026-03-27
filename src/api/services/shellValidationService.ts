@@ -38,6 +38,7 @@ export class ShellValidationService {
 
     this.validateRequiredFields(shell, blockingErrors);
     this.validateEnumValues(shell, blockingErrors);
+    this.validateTopicOrTags(shell, blockingErrors);
     this.validateRuntimeConfig(shell, blockingErrors);
     this.validateDifficultyMix(shell, blockingErrors);
     this.validateTimerConfig(shell, blockingErrors);
@@ -123,6 +124,23 @@ export class ShellValidationService {
         code: 'MISSING_SLUG',
         message: 'Slug is required',
         field: 'slug',
+      });
+    }
+  }
+
+  private validateTopicOrTags(shell: TriviaShell, errors: ValidationIssue[]): void {
+    if (shell.status === 'draft') {
+      return;
+    }
+
+    const hasTopic = shell.topic && shell.topic.trim().length > 0;
+    const hasTags = shell.tags && shell.tags.length > 0;
+
+    if (!hasTopic && !hasTags) {
+      errors.push({
+        code: 'MISSING_TOPIC_OR_TAGS',
+        message: 'Either Topic or Tags must be specified to move beyond draft status',
+        field: 'topic',
       });
     }
   }
