@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Plus, UserCheck, UserX, CreditCard as Edit2, X } from 'lucide-react';
-import { adminFetch } from '../../lib/adminApi';
+import { adminFetch, getSupabaseFunctionsUrl } from '../../lib/adminApi';
 import { AdminProfile } from '../../types/admin';
 import { useAuth } from '../../contexts/AuthContext';
+
+const USERS_API_URL = getSupabaseFunctionsUrl('admin-users');
 
 const roleColors: Record<string, string> = {
   admin: 'bg-blue-100 text-blue-700',
@@ -26,7 +28,7 @@ export function AdminUsers() {
     setLoading(true);
     setError('');
 
-    const result = await adminFetch<AdminProfile[]>('/api/admin/users');
+    const result = await adminFetch<AdminProfile[]>(USERS_API_URL);
 
     if (result.success && result.data) {
       setUsers(result.data);
@@ -39,7 +41,7 @@ export function AdminUsers() {
 
   async function toggleUserActive(user: AdminProfile) {
     const action = user.is_active ? 'deactivate' : 'activate';
-    const result = await adminFetch(`/api/admin/users/${user.id}/${action}`, {
+    const result = await adminFetch(`${USERS_API_URL}/${user.id}/${action}`, {
       method: 'PATCH',
     });
 
@@ -170,7 +172,7 @@ function EditUserModal({ user, currentUserId, onClose, onSaved }: EditUserModalP
     e.preventDefault();
     setSaving(true);
 
-    const result = await adminFetch(`/api/admin/users/${user.id}`, {
+    const result = await adminFetch(`${USERS_API_URL}/${user.id}`, {
       method: 'PUT',
       body: JSON.stringify({ display_name: displayName, role }),
     });
@@ -274,7 +276,7 @@ function CreateUserModal({ onClose, onCreated }: CreateUserModalProps) {
     e.preventDefault();
     setSaving(true);
 
-    const result = await adminFetch('/api/admin/users', {
+    const result = await adminFetch(USERS_API_URL, {
       method: 'POST',
       body: JSON.stringify(formData),
     });
