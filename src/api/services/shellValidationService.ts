@@ -402,11 +402,58 @@ export class ShellValidationService {
       });
     }
 
-    if (shell.is_lead_screen_enabled && !screens.lead) {
+    if (shell.is_lead_screen_enabled) {
+      this.validateLeadFormConfig(shell, errors);
+    }
+  }
+
+  private validateLeadFormConfig(shell: TriviaShell, errors: ValidationIssue[]): void {
+    const lead = shell.config?.screens?.lead;
+
+    if (!lead) {
       errors.push({
         code: 'MISSING_LEAD_SCREEN_CONFIG',
         message: 'Lead screen is enabled but configuration is missing',
         field: 'config.screens.lead',
+      });
+      return;
+    }
+
+    const enabledFields = (lead.fields || []).filter(f => f.enabled);
+
+    if (enabledFields.length === 0) {
+      errors.push({
+        code: 'NO_LEAD_FIELDS_ENABLED',
+        message: 'At least one form field must be enabled when lead screen is active',
+        field: 'config.screens.lead.fields',
+      });
+    }
+
+    for (const field of enabledFields) {
+      if (!field.label || field.label.trim().length === 0) {
+        errors.push({
+          code: 'EMPTY_FIELD_LABEL',
+          message: `Field "${field.type}" requires a label`,
+          field: `config.screens.lead.fields.${field.type}.label`,
+        });
+      }
+    }
+
+    if (lead.terms?.enabled && lead.terms?.required) {
+      if (!lead.terms.text || lead.terms.text.trim().length === 0) {
+        errors.push({
+          code: 'EMPTY_TERMS_TEXT',
+          message: 'Terms text is required when terms checkbox is enabled and required',
+          field: 'config.screens.lead.terms.text',
+        });
+      }
+    }
+
+    if (!lead.submit_label || lead.submit_label.trim().length === 0) {
+      errors.push({
+        code: 'EMPTY_SUBMIT_LABEL',
+        message: 'Submit button label is required',
+        field: 'config.screens.lead.submit_label',
       });
     }
   }

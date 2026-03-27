@@ -10,7 +10,7 @@ import {
   CampaignQuestionSet,
   AuthoredQuestion,
 } from '../../types/authoring';
-import { QuestionSnapshot, GameInstanceConfig } from '../../types/trivia';
+import { QuestionSnapshot, GameInstanceConfig, LeadCaptureConfig } from '../../types/trivia';
 
 export interface PlatformOverrides {
   selection_mode?: SelectionMode;
@@ -109,9 +109,11 @@ export class ShellConfigResolver {
 
   toGameInstanceConfig(
     resolved: ResolvedShellConfig,
-    platformLeadCapture?: { enabled: boolean; fields: Array<{ name: string; required: boolean; visible: boolean }> }
+    platformLeadCapture?: LeadCaptureConfig
   ): GameInstanceConfig {
     const background = resolved.backgrounds.game || resolved.backgrounds.default || '';
+
+    const shellLeadCapture: LeadCaptureConfig = this.buildLeadCaptureConfig(resolved);
 
     return {
       question_mode: resolved.selection_mode === 'fixed' ? 'fixed' : 'random',
@@ -126,13 +128,42 @@ export class ShellConfigResolver {
         max: msg.max,
         text: msg.message,
       })),
-      lead_capture: platformLeadCapture || {
-        enabled: resolved.is_lead_screen_enabled,
-        fields: [],
-      },
+      lead_capture: platformLeadCapture || shellLeadCapture,
       ui: {
         background_url: background,
       },
+    };
+  }
+
+  private buildLeadCaptureConfig(resolved: ResolvedShellConfig): LeadCaptureConfig {
+    const leadScreen = resolved.screens.lead;
+
+    if (!resolved.is_lead_screen_enabled) {
+      return {
+        enabled: false,
+        headline: '',
+        fields: [],
+        terms: { enabled: false, text: '', required: false },
+        submit_label: '',
+      };
+    }
+
+    const enabledFields = (leadScreen.fields || [])
+      .filter(f => f.enabled)
+      .map(f => ({
+        type: f.type,
+        name: f.type,
+        label: f.label,
+        placeholder: f.placeholder,
+        required: f.required,
+      }));
+
+    return {
+      enabled: true,
+      headline: leadScreen.headline || 'Complete Your Entry',
+      fields: enabledFields,
+      terms: leadScreen.terms || { enabled: false, text: '', required: false },
+      submit_label: leadScreen.submit_label || 'Submit',
     };
   }
 

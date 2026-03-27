@@ -27,6 +27,29 @@ interface ValidationData {
   mobile_fit_warnings: Array<{ question_id: string; field: string; message: string }>;
 }
 
+type LeadFormFieldType = 'name' | 'email' | 'phone' | 'text';
+
+interface LeadFormField {
+  type: LeadFormFieldType;
+  label: string;
+  placeholder: string;
+  required: boolean;
+  enabled: boolean;
+}
+
+interface LeadFormTermsConfig {
+  enabled: boolean;
+  text: string;
+  required: boolean;
+}
+
+interface LeadFormConfig {
+  headline: string;
+  fields: LeadFormField[];
+  terms: LeadFormTermsConfig;
+  submit_label: string;
+}
+
 interface Shell {
   id: string;
   internal_name: string;
@@ -62,7 +85,7 @@ interface Shell {
     };
     screens: {
       start: { headline: string; body: string; button_label: string };
-      lead: { headline: string; body: string; button_label: string };
+      lead: LeadFormConfig;
       game: { show_progress_bar: boolean; show_question_number: boolean };
       end: { headline_template: string; show_score_breakdown: boolean };
       feedback: { correct_headline: string; incorrect_headline: string; show_explanation: boolean };
@@ -180,7 +203,20 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
           backgrounds: { default: '', start: null, lead: null, game: null, end: null },
           screens: {
             start: { headline: 'Ready to Play?', body: 'Test your knowledge!', button_label: 'Start Quiz' },
-            lead: { headline: 'One More Step', body: 'Enter your details to continue', button_label: 'Continue' },
+            lead: {
+              headline: 'Complete Your Entry',
+              fields: [
+                { type: 'name', label: 'Name', placeholder: 'Enter your name', required: true, enabled: true },
+                { type: 'email', label: 'Email', placeholder: 'Enter your email', required: true, enabled: true },
+                { type: 'phone', label: 'Phone', placeholder: '10 digit phone number', required: false, enabled: false },
+              ],
+              terms: {
+                enabled: true,
+                text: 'By submitting your information you agree to receive promotional communications',
+                required: true,
+              },
+              submit_label: 'Submit',
+            },
             game: { show_progress_bar: true, show_question_number: true },
             end: { headline_template: 'You scored {score} out of {total}!', show_score_breakdown: true },
             feedback: { correct_headline: 'Correct!', incorrect_headline: 'Not quite!', show_explanation: true },
@@ -769,7 +805,7 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
 
               <div className="p-4 bg-gray-50 rounded-lg">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-medium text-gray-900">Lead Screen</h3>
+                  <h3 className="font-medium text-gray-900">Lead Form</h3>
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -781,28 +817,138 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
                   </label>
                 </div>
                 {formData.is_lead_screen_enabled && (
-                  <div className="space-y-3">
-                    <input
-                      type="text"
-                      placeholder="Headline"
-                      value={formData.config?.screens?.lead?.headline || ''}
-                      onChange={e => updateFormData('config.screens.lead.headline', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                    />
-                    <textarea
-                      placeholder="Body text"
-                      value={formData.config?.screens?.lead?.body || ''}
-                      onChange={e => updateFormData('config.screens.lead.body', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                      rows={2}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Button label"
-                      value={formData.config?.screens?.lead?.button_label || ''}
-                      onChange={e => updateFormData('config.screens.lead.button_label', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                    />
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Form Headline</label>
+                      <input
+                        type="text"
+                        placeholder="Headline"
+                        value={formData.config?.screens?.lead?.headline || ''}
+                        onChange={e => updateFormData('config.screens.lead.headline', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                      />
+                    </div>
+
+                    <div className="border-t border-gray-200 pt-4">
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">Form Fields</h4>
+                      {(formData.config?.screens?.lead?.fields || []).map((field, index) => (
+                        <div key={field.type} className="mb-3 p-3 bg-white rounded-lg border border-gray-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-3">
+                              <label className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={field.enabled}
+                                  onChange={e => {
+                                    const fields = [...(formData.config?.screens?.lead?.fields || [])];
+                                    fields[index] = { ...fields[index], enabled: e.target.checked };
+                                    updateFormData('config.screens.lead.fields', fields);
+                                  }}
+                                  className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                />
+                                <span className="text-sm font-medium text-gray-700 capitalize">{field.type}</span>
+                              </label>
+                            </div>
+                            {field.enabled && (
+                              <label className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={field.required}
+                                  onChange={e => {
+                                    const fields = [...(formData.config?.screens?.lead?.fields || [])];
+                                    fields[index] = { ...fields[index], required: e.target.checked };
+                                    updateFormData('config.screens.lead.fields', fields);
+                                  }}
+                                  className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                />
+                                <span className="text-xs text-gray-500">Required</span>
+                              </label>
+                            )}
+                          </div>
+                          {field.enabled && (
+                            <div className="grid grid-cols-2 gap-2 mt-2">
+                              <div>
+                                <label className="block text-xs text-gray-500 mb-1">Label</label>
+                                <input
+                                  type="text"
+                                  value={field.label}
+                                  onChange={e => {
+                                    const fields = [...(formData.config?.screens?.lead?.fields || [])];
+                                    fields[index] = { ...fields[index], label: e.target.value };
+                                    updateFormData('config.screens.lead.fields', fields);
+                                  }}
+                                  className="w-full px-2 py-1 text-sm border border-gray-200 rounded"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-500 mb-1">Placeholder</label>
+                                <input
+                                  type="text"
+                                  value={field.placeholder}
+                                  onChange={e => {
+                                    const fields = [...(formData.config?.screens?.lead?.fields || [])];
+                                    fields[index] = { ...fields[index], placeholder: e.target.value };
+                                    updateFormData('config.screens.lead.fields', fields);
+                                  }}
+                                  className="w-full px-2 py-1 text-sm border border-gray-200 rounded"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="border-t border-gray-200 pt-4">
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">Terms & Conditions</h4>
+                      <div className="p-3 bg-white rounded-lg border border-gray-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={formData.config?.screens?.lead?.terms?.enabled ?? true}
+                              onChange={e => updateFormData('config.screens.lead.terms.enabled', e.target.checked)}
+                              className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                            />
+                            <span className="text-sm font-medium text-gray-700">Show Terms Checkbox</span>
+                          </label>
+                          {formData.config?.screens?.lead?.terms?.enabled && (
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={formData.config?.screens?.lead?.terms?.required ?? true}
+                                onChange={e => updateFormData('config.screens.lead.terms.required', e.target.checked)}
+                                className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                              />
+                              <span className="text-xs text-gray-500">Required</span>
+                            </label>
+                          )}
+                        </div>
+                        {formData.config?.screens?.lead?.terms?.enabled && (
+                          <div className="mt-2">
+                            <label className="block text-xs text-gray-500 mb-1">Terms Text</label>
+                            <textarea
+                              value={formData.config?.screens?.lead?.terms?.text || ''}
+                              onChange={e => updateFormData('config.screens.lead.terms.text', e.target.value)}
+                              className="w-full px-2 py-1 text-sm border border-gray-200 rounded"
+                              rows={2}
+                              placeholder="Enter terms and conditions text..."
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="border-t border-gray-200 pt-4">
+                      <label className="block text-xs text-gray-500 mb-1">Submit Button Label</label>
+                      <input
+                        type="text"
+                        placeholder="Submit"
+                        value={formData.config?.screens?.lead?.submit_label || ''}
+                        onChange={e => updateFormData('config.screens.lead.submit_label', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                      />
+                    </div>
                   </div>
                 )}
               </div>

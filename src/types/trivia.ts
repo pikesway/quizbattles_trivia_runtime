@@ -71,10 +71,7 @@ export interface GameInstanceConfig {
   };
   scoring_mode: 'accuracy_only';
   end_screen_rules: EndScreenRule[];
-  lead_capture: {
-    enabled: boolean;
-    fields: LeadField[];
-  };
+  lead_capture: LeadCaptureConfig;
   ui: {
     background_url: string;
   };
@@ -86,10 +83,28 @@ export interface EndScreenRule {
   text: string;
 }
 
+export type LeadFieldType = 'name' | 'email' | 'phone' | 'text';
+
 export interface LeadField {
+  type: LeadFieldType;
   name: string;
+  label: string;
+  placeholder: string;
   required: boolean;
-  visible: boolean;
+}
+
+export interface LeadTermsConfig {
+  enabled: boolean;
+  text: string;
+  required: boolean;
+}
+
+export interface LeadCaptureConfig {
+  enabled: boolean;
+  headline: string;
+  fields: LeadField[];
+  terms: LeadTermsConfig;
+  submit_label: string;
 }
 
 export interface ApiResponse<T> {
@@ -119,10 +134,7 @@ export interface StartSessionResponse {
   ui: {
     background_url: string;
   };
-  lead_capture: {
-    enabled: boolean;
-    fields: LeadField[];
-  };
+  lead_capture: LeadCaptureConfig;
   timer: {
     mode: TimerMode;
     seconds: number;

@@ -9,6 +9,21 @@ import { AdminUsers } from './AdminUsers';
 
 type Page = 'shells' | 'questions' | 'reviews' | 'imports' | 'users';
 
+interface LeadFormField {
+  type: 'name' | 'email' | 'phone' | 'text';
+  label: string;
+  placeholder: string;
+  required: boolean;
+  enabled: boolean;
+}
+
+interface LeadFormConfig {
+  headline: string;
+  fields: LeadFormField[];
+  terms: { enabled: boolean; text: string; required: boolean };
+  submit_label: string;
+}
+
 interface Shell {
   id: string;
   internal_name: string;
@@ -44,7 +59,7 @@ interface Shell {
     };
     screens: {
       start: { headline: string; body: string; button_label: string };
-      lead: { headline: string; body: string; button_label: string };
+      lead: LeadFormConfig;
       game: { show_progress_bar: boolean; show_question_number: boolean };
       end: { headline_template: string; show_score_breakdown: boolean };
       feedback: { correct_headline: string; incorrect_headline: string; show_explanation: boolean };

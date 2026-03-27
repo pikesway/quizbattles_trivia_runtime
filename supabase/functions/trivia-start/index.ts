@@ -19,15 +19,34 @@ interface AnswerSnapshot {
   is_correct: boolean;
 }
 
+interface LeadField {
+  type: 'name' | 'email' | 'phone' | 'text';
+  name: string;
+  label: string;
+  placeholder: string;
+  required: boolean;
+}
+
+interface LeadTermsConfig {
+  enabled: boolean;
+  text: string;
+  required: boolean;
+}
+
+interface LeadCaptureConfig {
+  enabled: boolean;
+  headline: string;
+  fields: LeadField[];
+  terms: LeadTermsConfig;
+  submit_label: string;
+}
+
 interface GameConfig {
   question_mode: 'fixed' | 'random';
   question_count: number;
   timer: { mode: string; seconds: number };
   ui: { background_url: string };
-  lead_capture: {
-    enabled: boolean;
-    fields: Array<{ name: string; required: boolean; visible: boolean }>;
-  };
+  lead_capture: LeadCaptureConfig;
   end_screen_rules: Array<{ min: number; max: number; text: string }>;
 }
 
@@ -48,10 +67,18 @@ function getDefaultConfig(): GameConfig {
     ui: { background_url: 'https://images.pexels.com/photos/1939485/pexels-photo-1939485.jpeg' },
     lead_capture: {
       enabled: true,
+      headline: 'Complete Your Entry',
       fields: [
-        { name: 'email', required: true, visible: true },
-        { name: 'name', required: false, visible: true },
+        { type: 'name', name: 'name', label: 'Name', placeholder: 'Enter your name', required: true },
+        { type: 'email', name: 'email', label: 'Email', placeholder: 'Enter your email', required: true },
+        { type: 'phone', name: 'phone', label: 'Phone', placeholder: '10 digit phone number', required: false },
       ],
+      terms: {
+        enabled: true,
+        text: 'By submitting your information you agree to receive promotional communications',
+        required: true,
+      },
+      submit_label: 'Submit',
     },
     end_screen_rules: [
       { min: 0, max: 0, text: 'Try again! Better luck next time.' },

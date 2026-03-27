@@ -1,4 +1,4 @@
-import { GameInstanceConfig, LeadField } from '../../types/trivia';
+import { GameInstanceConfig, LeadCaptureConfig } from '../../types/trivia';
 import { ShellConfigResolver, PlatformOverrides } from './shellConfigResolver';
 import { ResolvedShellConfig } from '../../types/authoring';
 
@@ -33,10 +33,17 @@ export class ConfigService {
       ],
       lead_capture: {
         enabled: true,
+        headline: 'Complete Your Entry',
         fields: [
-          { name: 'email', required: true, visible: true },
-          { name: 'name', required: false, visible: true },
+          { type: 'name', name: 'name', label: 'Name', placeholder: 'Enter your name', required: true },
+          { type: 'email', name: 'email', label: 'Email', placeholder: 'Enter your email', required: true },
         ],
+        terms: {
+          enabled: true,
+          text: 'By submitting your information you agree to receive promotional communications',
+          required: true,
+        },
+        submit_label: 'Submit',
       },
       ui: {
         background_url: 'https://images.pexels.com/photos/1939485/pexels-photo-1939485.jpeg',
@@ -51,7 +58,7 @@ export class ConfigService {
   async getConfigFromShell(
     shellIdOrSlug: string,
     platformOverrides?: PlatformOverrides,
-    platformLeadCapture?: { enabled: boolean; fields: LeadField[] }
+    platformLeadCapture?: LeadCaptureConfig
   ): Promise<ConfigResolutionResult> {
     try {
       const resolvedShellConfig = await this.shellResolver.resolveConfig(
@@ -82,7 +89,7 @@ export class ConfigService {
     shellIdOrSlug: string | undefined,
     _campaignGameInstanceId: string,
     platformOverrides?: PlatformOverrides,
-    platformLeadCapture?: { enabled: boolean; fields: LeadField[] }
+    platformLeadCapture?: LeadCaptureConfig
   ): Promise<ConfigResolutionResult> {
     if (shellIdOrSlug) {
       return this.getConfigFromShell(shellIdOrSlug, platformOverrides, platformLeadCapture);

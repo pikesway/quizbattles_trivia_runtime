@@ -71,10 +71,27 @@ export interface StartScreenConfig {
   disclaimer_text: string | null;
 }
 
-export interface LeadScreenConfig {
+export type LeadFormFieldType = 'name' | 'email' | 'phone' | 'text';
+
+export interface LeadFormField {
+  type: LeadFormFieldType;
+  label: string;
+  placeholder: string;
+  required: boolean;
+  enabled: boolean;
+}
+
+export interface LeadFormTermsConfig {
+  enabled: boolean;
+  text: string;
+  required: boolean;
+}
+
+export interface LeadFormConfig {
   headline: string;
-  body: string;
-  button_label: string;
+  fields: LeadFormField[];
+  terms: LeadFormTermsConfig;
+  submit_label: string;
 }
 
 export interface GameScreenConfig {
@@ -96,7 +113,7 @@ export interface FeedbackScreenConfig {
 
 export interface ShellScreens {
   start: StartScreenConfig;
-  lead: LeadScreenConfig;
+  lead: LeadFormConfig;
   game: GameScreenConfig;
   end: EndScreenConfig;
   feedback: FeedbackScreenConfig;

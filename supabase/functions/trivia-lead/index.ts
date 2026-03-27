@@ -6,9 +6,94 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
 };
 
+interface LeadField {
+  type: 'name' | 'email' | 'phone' | 'text';
+  name: string;
+  label: string;
+  placeholder: string;
+  required: boolean;
+}
+
+interface LeadTermsConfig {
+  enabled: boolean;
+  text: string;
+  required: boolean;
+}
+
+interface LeadCaptureConfig {
+  enabled: boolean;
+  headline: string;
+  fields: LeadField[];
+  terms: LeadTermsConfig;
+  submit_label: string;
+}
+
 interface LeadCapturePayload {
   session_id: string;
   data: Record<string, string>;
+  terms_accepted?: boolean;
+}
+
+interface ValidationError {
+  field: string;
+  message: string;
+}
+
+function validateEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+function validatePhone(phone: string): boolean {
+  const digitsOnly = phone.replace(/\D/g, '');
+  return digitsOnly.length === 10;
+}
+
+function validateLeadData(
+  data: Record<string, string>,
+  termsAccepted: boolean | undefined,
+  leadCaptureConfig: LeadCaptureConfig
+): ValidationError[] {
+  const errors: ValidationError[] = [];
+
+  for (const field of leadCaptureConfig.fields) {
+    const value = data[field.name]?.trim() || '';
+
+    if (field.required && !value) {
+      errors.push({
+        field: field.name,
+        message: `${field.label} is required`,
+      });
+      continue;
+    }
+
+    if (value) {
+      if (field.type === 'email' && !validateEmail(value)) {
+        errors.push({
+          field: field.name,
+          message: 'Please enter a valid email address',
+        });
+      }
+
+      if (field.type === 'phone' && !validatePhone(value)) {
+        errors.push({
+          field: field.name,
+          message: 'Please enter a valid 10 digit phone number',
+        });
+      }
+    }
+  }
+
+  if (leadCaptureConfig.terms?.enabled && leadCaptureConfig.terms?.required) {
+    if (!termsAccepted) {
+      errors.push({
+        field: 'terms',
+        message: 'You must accept the terms to continue',
+      });
+    }
+  }
+
+  return errors;
 }
 
 async function captureLeadOnPlatform(
@@ -47,6 +132,10 @@ async function captureLeadOnPlatform(
   }
 }
 
+function isTestSession(session: any): boolean {
+  return session.is_test_session === true;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -57,7 +146,7 @@ Deno.serve(async (req: Request) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { session_id, data }: LeadCapturePayload = await req.json();
+    const { session_id, data, terms_accepted }: LeadCapturePayload = await req.json();
 
     if (!session_id || !data) {
       return new Response(
@@ -92,6 +181,47 @@ Deno.serve(async (req: Request) => {
           error: { code: 'LEAD_ALREADY_CAPTURED', message: 'Lead already captured for this session' },
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const leadCaptureConfig: LeadCaptureConfig = session.config?.lead_capture || {
+      enabled: true,
+      headline: 'Complete Your Entry',
+      fields: [
+        { type: 'name', name: 'name', label: 'Name', placeholder: 'Enter your name', required: true },
+        { type: 'email', name: 'email', label: 'Email', placeholder: 'Enter your email', required: true },
+      ],
+      terms: { enabled: false, text: '', required: false },
+      submit_label: 'Submit',
+    };
+
+    const validationErrors = validateLeadData(data, terms_accepted, leadCaptureConfig);
+    if (validationErrors.length > 0) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: 'Please correct the errors below',
+            details: validationErrors,
+          },
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (isTestSession(session)) {
+      console.log('Test session detected, skipping platform lead capture');
+      return new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            lead_id: null,
+            captured: false,
+            test_mode: true,
+          },
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
