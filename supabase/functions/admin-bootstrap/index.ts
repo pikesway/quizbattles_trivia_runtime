@@ -69,6 +69,14 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const { count: adminCount, error: countError } = await supabase
+      .from('trivia_admin_users')
+      .select('*', { count: 'exact', head: true });
+
+    if (countError) throw countError;
+
+    const isFirstAdmin = adminCount === 0;
+
     const bootstrapEmails = Deno.env.get('ADMIN_BOOTSTRAP_EMAILS') || '';
     const allowedEmails = bootstrapEmails
       .split(',')
@@ -77,7 +85,9 @@ Deno.serve(async (req: Request) => {
 
     const userEmail = user.email?.toLowerCase() || '';
 
-    if (!allowedEmails.includes(userEmail)) {
+    const isAllowedByEnv = allowedEmails.includes(userEmail);
+
+    if (!isFirstAdmin && !isAllowedByEnv) {
       return new Response(
         JSON.stringify(errorResponse('NOT_AUTHORIZED', 'You are not authorized for admin access. Contact an administrator if you believe this is an error.')),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

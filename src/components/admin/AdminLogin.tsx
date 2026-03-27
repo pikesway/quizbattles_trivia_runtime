@@ -14,10 +14,15 @@ export function AdminLogin() {
     setError('');
     setIsLoading(true);
 
-    const { error: signInError } = await signIn(email, password);
+    try {
+      const { error: signInError } = await signIn(email, password);
 
-    if (signInError) {
-      setError(signInError);
+      if (signInError) {
+        setError(signInError);
+      }
+    } catch (err) {
+      setError((err as Error).message || 'Sign in failed');
+    } finally {
       setIsLoading(false);
     }
   }
