@@ -3,6 +3,7 @@ import { ArrowLeft, Save, AlertTriangle, CheckCircle, Smartphone, RefreshCw, XCi
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../../lib/supabase';
 import { ImageInput } from './ImageInput';
+import { ScreensEditor } from './ScreensEditor';
 
 interface ValidationIssue {
   code: string;
@@ -87,8 +88,8 @@ interface Shell {
     screens: {
       start: { headline: string; body: string; button_label: string };
       lead: LeadFormConfig;
-      game: { show_progress_bar: boolean; show_question_number: boolean };
-      end: { headline_template: string; show_score_breakdown: boolean };
+      game: { show_progress_bar: boolean; show_question_number: boolean; spacing?: 'compact' | 'comfortable' | 'spacious' };
+      end: { headline_template: string; show_score_breakdown: boolean; cta?: { enabled: boolean; label: string }; social_share?: { enabled: boolean; share_text_template: string; share_image_url: string; hashtags: string[]; fallback_url: string } };
       feedback: { correct_headline: string; incorrect_headline: string; show_explanation: boolean };
     };
     score_range_messages: Array<{ min: number; max: number; message: string }>;
@@ -316,8 +317,13 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
               },
               submit_label: 'Submit',
             },
-            game: { show_progress_bar: true, show_question_number: true },
-            end: { headline_template: 'You scored {score} out of {total}!', show_score_breakdown: true },
+            game: { show_progress_bar: true, show_question_number: true, spacing: 'comfortable' },
+            end: {
+              headline_template: 'You scored {score} out of {total}!',
+              show_score_breakdown: true,
+              cta: { enabled: false, label: 'Continue' },
+              social_share: { enabled: false, share_text_template: 'I scored {percentage}% on {quiz_name}!', share_image_url: '', hashtags: [], fallback_url: '' },
+            },
             feedback: { correct_headline: 'Correct!', incorrect_headline: 'Not quite!', show_explanation: true },
           },
           score_range_messages: [
@@ -967,274 +973,21 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
           )}
 
           {activeTab === 'screens' && (
-            <div className="space-y-6 max-w-2xl">
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-medium text-gray-900">Start Screen</h3>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={formData.is_start_screen_enabled ?? true}
-                      onChange={e => updateFormData('is_start_screen_enabled', e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-600">Enabled</span>
-                  </label>
-                </div>
-                {formData.is_start_screen_enabled && (
-                  <div className="space-y-3">
-                    <input
-                      type="text"
-                      placeholder="Headline"
-                      value={formData.config?.screens?.start?.headline || ''}
-                      onChange={e => updateFormData('config.screens.start.headline', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                    />
-                    <textarea
-                      placeholder="Body text"
-                      value={formData.config?.screens?.start?.body || ''}
-                      onChange={e => updateFormData('config.screens.start.body', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                      rows={2}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Button label"
-                      value={formData.config?.screens?.start?.button_label || ''}
-                      onChange={e => updateFormData('config.screens.start.button_label', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-medium text-gray-900">Lead Form</h3>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={formData.is_lead_screen_enabled ?? true}
-                      onChange={e => updateFormData('is_lead_screen_enabled', e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-600">Enabled</span>
-                  </label>
-                </div>
-                {formData.is_lead_screen_enabled && (
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">Form Headline</label>
-                      <input
-                        type="text"
-                        placeholder="Headline"
-                        value={formData.config?.screens?.lead?.headline || ''}
-                        onChange={e => updateFormData('config.screens.lead.headline', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                      />
-                    </div>
-
-                    <div className="border-t border-gray-200 pt-4">
-                      <h4 className="text-sm font-medium text-gray-700 mb-3">Form Fields</h4>
-                      {(formData.config?.screens?.lead?.fields || []).map((field, index) => (
-                        <div key={field.type} className="mb-3 p-3 bg-white rounded-lg border border-gray-200">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-3">
-                              <label className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  checked={field.enabled}
-                                  onChange={e => {
-                                    const fields = [...(formData.config?.screens?.lead?.fields || [])];
-                                    fields[index] = { ...fields[index], enabled: e.target.checked };
-                                    updateFormData('config.screens.lead.fields', fields);
-                                  }}
-                                  className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                                />
-                                <span className="text-sm font-medium text-gray-700 capitalize">{field.type}</span>
-                              </label>
-                            </div>
-                            {field.enabled && (
-                              <label className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  checked={field.required}
-                                  onChange={e => {
-                                    const fields = [...(formData.config?.screens?.lead?.fields || [])];
-                                    fields[index] = { ...fields[index], required: e.target.checked };
-                                    updateFormData('config.screens.lead.fields', fields);
-                                  }}
-                                  className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                                />
-                                <span className="text-xs text-gray-500">Required</span>
-                              </label>
-                            )}
-                          </div>
-                          {field.enabled && (
-                            <div className="grid grid-cols-2 gap-2 mt-2">
-                              <div>
-                                <label className="block text-xs text-gray-500 mb-1">Label</label>
-                                <input
-                                  type="text"
-                                  value={field.label}
-                                  onChange={e => {
-                                    const fields = [...(formData.config?.screens?.lead?.fields || [])];
-                                    fields[index] = { ...fields[index], label: e.target.value };
-                                    updateFormData('config.screens.lead.fields', fields);
-                                  }}
-                                  className="w-full px-2 py-1 text-sm border border-gray-200 rounded"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs text-gray-500 mb-1">Placeholder</label>
-                                <input
-                                  type="text"
-                                  value={field.placeholder}
-                                  onChange={e => {
-                                    const fields = [...(formData.config?.screens?.lead?.fields || [])];
-                                    fields[index] = { ...fields[index], placeholder: e.target.value };
-                                    updateFormData('config.screens.lead.fields', fields);
-                                  }}
-                                  className="w-full px-2 py-1 text-sm border border-gray-200 rounded"
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="border-t border-gray-200 pt-4">
-                      <h4 className="text-sm font-medium text-gray-700 mb-3">Terms & Conditions</h4>
-                      <div className="p-3 bg-white rounded-lg border border-gray-200">
-                        <div className="flex items-center justify-between mb-2">
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={formData.config?.screens?.lead?.terms?.enabled ?? true}
-                              onChange={e => updateFormData('config.screens.lead.terms.enabled', e.target.checked)}
-                              className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                            />
-                            <span className="text-sm font-medium text-gray-700">Show Terms Checkbox</span>
-                          </label>
-                          {formData.config?.screens?.lead?.terms?.enabled && (
-                            <label className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={formData.config?.screens?.lead?.terms?.required ?? true}
-                                onChange={e => updateFormData('config.screens.lead.terms.required', e.target.checked)}
-                                className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                              />
-                              <span className="text-xs text-gray-500">Required</span>
-                            </label>
-                          )}
-                        </div>
-                        {formData.config?.screens?.lead?.terms?.enabled && (
-                          <div className="mt-2">
-                            <label className="block text-xs text-gray-500 mb-1">Terms Text</label>
-                            <textarea
-                              value={formData.config?.screens?.lead?.terms?.text || ''}
-                              onChange={e => updateFormData('config.screens.lead.terms.text', e.target.value)}
-                              className="w-full px-2 py-1 text-sm border border-gray-200 rounded"
-                              rows={2}
-                              placeholder="Enter terms and conditions text..."
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="border-t border-gray-200 pt-4">
-                      <label className="block text-xs text-gray-500 mb-1">Submit Button Label</label>
-                      <input
-                        type="text"
-                        placeholder="Submit"
-                        value={formData.config?.screens?.lead?.submit_label || ''}
-                        onChange={e => updateFormData('config.screens.lead.submit_label', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <h3 className="font-medium text-gray-900 mb-3">Game Screen</h3>
-                <div className="space-y-3">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={formData.config?.screens?.game?.show_progress_bar ?? true}
-                      onChange={e => updateFormData('config.screens.game.show_progress_bar', e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded"
-                    />
-                    <span className="text-sm text-gray-700">Show progress bar</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={formData.config?.screens?.game?.show_question_number ?? true}
-                      onChange={e => updateFormData('config.screens.game.show_question_number', e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded"
-                    />
-                    <span className="text-sm text-gray-700">Show question number</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <h3 className="font-medium text-gray-900 mb-3">End Screen</h3>
-                <div className="space-y-3">
-                  <input
-                    type="text"
-                    placeholder="Headline template (use {score} and {total})"
-                    value={formData.config?.screens?.end?.headline_template || ''}
-                    onChange={e => updateFormData('config.screens.end.headline_template', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                  />
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={formData.config?.screens?.end?.show_score_breakdown ?? true}
-                      onChange={e => updateFormData('config.screens.end.show_score_breakdown', e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded"
-                    />
-                    <span className="text-sm text-gray-700">Show score breakdown</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <h3 className="font-medium text-gray-900 mb-3">Feedback Modal</h3>
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <input
-                      type="text"
-                      placeholder="Correct headline"
-                      value={formData.config?.screens?.feedback?.correct_headline || ''}
-                      onChange={e => updateFormData('config.screens.feedback.correct_headline', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Incorrect headline"
-                      value={formData.config?.screens?.feedback?.incorrect_headline || ''}
-                      onChange={e => updateFormData('config.screens.feedback.incorrect_headline', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                    />
-                  </div>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={formData.config?.screens?.feedback?.show_explanation ?? true}
-                      onChange={e => updateFormData('config.screens.feedback.show_explanation', e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded"
-                    />
-                    <span className="text-sm text-gray-700">Show explanation after answer</span>
-                  </label>
-                </div>
-              </div>
-            </div>
+            <ScreensEditor
+              shellId={shell?.id || null}
+              isStartScreenEnabled={formData.is_start_screen_enabled ?? true}
+              isLeadScreenEnabled={formData.is_lead_screen_enabled ?? true}
+              config={formData.config?.screens || {
+                start: { headline: '', body: '', button_label: '' },
+                lead: { headline: '', fields: [], terms: { enabled: true, text: '', required: true }, submit_label: '' },
+                game: { show_progress_bar: true, show_question_number: true, spacing: 'comfortable' },
+                end: { headline_template: '', show_score_breakdown: true, cta: { enabled: false, label: '' }, social_share: { enabled: false, share_text_template: '', share_image_url: '', hashtags: [], fallback_url: '' } },
+                feedback: { correct_headline: '', incorrect_headline: '', show_explanation: true },
+              }}
+              onStartScreenEnabledChange={(enabled) => updateFormData('is_start_screen_enabled', enabled)}
+              onLeadScreenEnabledChange={(enabled) => updateFormData('is_lead_screen_enabled', enabled)}
+              onConfigChange={updateFormData}
+            />
           )}
 
           {activeTab === 'preview' && (

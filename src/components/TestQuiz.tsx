@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, AlertTriangle, Share2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { GameStage, StageHeader, StageBody, StageFooter } from './runtime/GameStage';
+
+type GameScreenSpacing = 'compact' | 'comfortable' | 'spacious';
 
 interface TestQuizProps {
   token: string;
@@ -26,8 +28,19 @@ interface ShellConfig {
   };
   screens: {
     start: { headline: string; body: string; button_label: string };
-    game: { show_progress_bar: boolean; show_question_number: boolean };
-    end: { headline_template: string; show_score_breakdown: boolean };
+    game: { show_progress_bar: boolean; show_question_number: boolean; spacing?: GameScreenSpacing };
+    end: {
+      headline_template: string;
+      show_score_breakdown: boolean;
+      cta?: { enabled: boolean; label: string };
+      social_share?: {
+        enabled: boolean;
+        share_text_template: string;
+        share_image_url: string;
+        hashtags: string[];
+        fallback_url: string;
+      };
+    };
     feedback: { correct_headline: string; incorrect_headline: string; show_explanation: boolean };
   };
   score_range_messages: Array<{ min: number; max: number; message: string }>;
@@ -352,6 +365,56 @@ export function TestQuiz({ token }: TestQuizProps) {
   const backgrounds = config?.backgrounds;
   const screens = config?.screens;
 
+  const getSpacingClasses = (spacing: GameScreenSpacing = 'comfortable') => {
+    switch (spacing) {
+      case 'compact':
+        return { questionMb: 'mb-2', answerGap: 'space-y-1.5', answerPadding: 'p-2.5 sm:p-3' };
+      case 'spacious':
+        return { questionMb: 'mb-6', answerGap: 'space-y-4', answerPadding: 'p-4 sm:p-5' };
+      default:
+        return { questionMb: 'mb-4', answerGap: 'space-y-2 sm:space-y-3', answerPadding: 'p-3 sm:p-4' };
+    }
+  };
+
+  const spacing = getSpacingClasses(screens?.game?.spacing);
+
+  function getShareText(): string {
+    if (!session || !screens?.end?.social_share?.share_text_template) return '';
+    const pct = Math.round((session.correct_answers / session.total_questions) * 100);
+    const scoreMessage = config?.score_range_messages?.find(
+      m => pct >= m.min && pct <= m.max
+    )?.message || '';
+    return screens.end.social_share.share_text_template
+      .replace(/{score}/g, String(session.correct_answers))
+      .replace(/{total}/g, String(session.total_questions))
+      .replace(/{percentage}/g, String(pct))
+      .replace(/{quiz_name}/g, shell?.internal_name || 'Quiz')
+      .replace(/{result_message}/g, scoreMessage);
+  }
+
+  async function handleShare() {
+    const shareConfig = screens?.end?.social_share;
+    if (!shareConfig?.enabled) return;
+
+    const shareText = getShareText();
+    const url = shareConfig.fallback_url || window.location.href;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: shell?.internal_name || 'Quiz Results',
+          text: shareText,
+          url,
+        });
+      } catch {
+      }
+    } else {
+      const hashtags = (shareConfig.hashtags || []).join(',');
+      const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(url)}${hashtags ? `&hashtags=${encodeURIComponent(hashtags)}` : ''}`;
+      window.open(twitterUrl, '_blank', 'width=550,height=420');
+    }
+  }
+
   const getBackground = () => {
     if (screen === 'start' && backgrounds?.start) return backgrounds.start;
     if ((screen === 'game' || screen === 'feedback') && backgrounds?.game) return backgrounds.game;
@@ -453,14 +516,14 @@ export function TestQuiz({ token }: TestQuizProps) {
               </div>
 
               <h2
-                className="text-lg sm:text-xl font-medium mb-4 flex-shrink-0"
+                className={`text-lg sm:text-xl font-medium ${spacing.questionMb} flex-shrink-0 text-center`}
                 style={{ color: theme?.primary_text_color }}
               >
                 {session.question_set[session.current_index].question_text}
               </h2>
 
               <div className="flex-1 flex flex-col justify-center min-h-0 overflow-y-auto">
-                <div className="space-y-2 sm:space-y-3">
+                <div className={spacing.answerGap}>
                   {session.question_set[session.current_index].answers.map(answer => {
                     const isSelected = selectedAnswerId === answer.id;
                     const showResult = selectedAnswerId !== null;
@@ -487,15 +550,15 @@ export function TestQuiz({ token }: TestQuizProps) {
                         key={answer.id}
                         onClick={() => handleAnswerSelect(answer.id)}
                         disabled={selectedAnswerId !== null}
-                        className="w-full p-3 sm:p-4 rounded-lg text-left border-2 transition-all disabled:cursor-default text-sm sm:text-base"
+                        className={`w-full ${spacing.answerPadding} rounded-lg text-center border-2 transition-all disabled:cursor-default text-sm sm:text-base`}
                         style={{
                           borderColor,
                           backgroundColor: bgColor,
                           color: theme?.primary_text_color,
                         }}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="flex-1">{answer.answer_text}</span>
+                        <div className="flex items-center justify-center gap-2">
+                          <span>{answer.answer_text}</span>
                           {showResult && isCorrect && (
                             <CheckCircle className="w-5 h-5 flex-shrink-0" style={{ color: theme?.correct_feedback_accent }} />
                           )}
@@ -584,7 +647,7 @@ export function TestQuiz({ token }: TestQuizProps) {
               )}
               {screens.end.show_score_breakdown && (
                 <div
-                  className="p-3 sm:p-4 rounded-lg mb-6"
+                  className="p-3 sm:p-4 rounded-lg mb-4"
                   style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}
                 >
                   <p className="text-sm" style={{ color: theme?.secondary_text_color }}>
@@ -592,6 +655,32 @@ export function TestQuiz({ token }: TestQuizProps) {
                   </p>
                 </div>
               )}
+              <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                {screens.end.cta?.enabled && (
+                  <button
+                    className="px-6 py-3 font-medium rounded-lg transition-transform active:scale-95"
+                    style={{
+                      backgroundColor: theme?.button_fill_color,
+                      color: theme?.button_text_color,
+                    }}
+                  >
+                    {screens.end.cta.label || 'Continue'}
+                  </button>
+                )}
+                {screens.end.social_share?.enabled && (
+                  <button
+                    onClick={handleShare}
+                    className="px-6 py-3 font-medium rounded-lg transition-transform active:scale-95 flex items-center justify-center gap-2"
+                    style={{
+                      backgroundColor: 'rgba(255,255,255,0.2)',
+                      color: theme?.primary_text_color,
+                    }}
+                  >
+                    <Share2 className="w-4 h-4" />
+                    Share
+                  </button>
+                )}
+              </div>
               <p
                 className="text-xs sm:text-sm"
                 style={{ color: theme?.secondary_text_color }}

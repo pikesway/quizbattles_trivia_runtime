@@ -6,19 +6,69 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
 };
 
-const DEFAULT_END_SCREEN_RULES = [
-  { min: 0, max: 0, text: 'Try again! Better luck next time.' },
-  { min: 1, max: 4, text: 'Not bad! Keep practicing.' },
-  { min: 5, max: 7, text: 'Good job! You know your stuff.' },
-  { min: 8, max: 9, text: 'Excellent! Almost perfect.' },
-  { min: 10, max: 100, text: 'Legend! Perfect score!' },
+interface EndScreenCase {
+  id: string;
+  min_percentage: number;
+  max_percentage: number | null;
+  message: string;
+  share_text_override: string | null;
+}
+
+interface EndScreenRule {
+  min: number;
+  max: number;
+  text: string;
+}
+
+interface EndScreenCtaConfig {
+  enabled: boolean;
+  label: string;
+}
+
+interface SocialShareConfig {
+  enabled: boolean;
+  share_text_template: string;
+  share_image_url: string;
+  hashtags: string[];
+  fallback_url: string;
+}
+
+const DEFAULT_END_SCREEN_RULES: EndScreenRule[] = [
+  { min: 0, max: 20, text: 'Keep practicing!' },
+  { min: 21, max: 50, text: 'Good effort!' },
+  { min: 51, max: 80, text: 'Well done!' },
+  { min: 81, max: 100, text: 'Excellent!' },
 ];
 
-function getEndScreenMessage(score: number, rules: Array<{ min: number; max: number; text: string }>): string {
+function getEndScreenMessageFromCases(
+  percentage: number,
+  cases: EndScreenCase[]
+): { message: string; shareTextOverride: string | null } | null {
+  if (!cases || cases.length === 0) {
+    return null;
+  }
+
+  for (const caseItem of cases) {
+    const maxPct = caseItem.max_percentage ?? 100;
+    if (percentage >= caseItem.min_percentage && percentage <= maxPct) {
+      return {
+        message: caseItem.message,
+        shareTextOverride: caseItem.share_text_override,
+      };
+    }
+  }
+
+  return null;
+}
+
+function getEndScreenMessageFromLegacyRules(
+  percentage: number,
+  rules: EndScreenRule[]
+): string {
   const endScreenRules = rules && rules.length > 0 ? rules : DEFAULT_END_SCREEN_RULES;
 
   for (const rule of endScreenRules) {
-    if (score >= rule.min && score <= rule.max) {
+    if (percentage >= rule.min && percentage <= rule.max) {
       return rule.text;
     }
   }
@@ -26,7 +76,23 @@ function getEndScreenMessage(score: number, rules: Array<{ min: number; max: num
   return 'Game completed!';
 }
 
-async function recordGamePlayOnPlatform(session: any): Promise<void> {
+function resolveShareText(
+  template: string,
+  score: number,
+  total: number,
+  percentage: number,
+  resultMessage: string,
+  quizName: string
+): string {
+  return template
+    .replace(/\{score\}/g, String(score))
+    .replace(/\{total\}/g, String(total))
+    .replace(/\{percentage\}/g, String(percentage))
+    .replace(/\{result_message\}/g, resultMessage)
+    .replace(/\{quiz_name\}/g, quizName);
+}
+
+async function recordGamePlayOnPlatform(session: Record<string, unknown>): Promise<void> {
   const platformUrl = Deno.env.get('PLATFORM_API_URL');
   if (!platformUrl) {
     console.log('Platform API URL not configured, skipping game play record');
@@ -35,7 +101,7 @@ async function recordGamePlayOnPlatform(session: any): Promise<void> {
 
   try {
     const completionTimeMs = session.completed_at
-      ? new Date(session.completed_at).getTime() - new Date(session.started_at).getTime()
+      ? new Date(session.completed_at as string).getTime() - new Date(session.started_at as string).getTime()
       : 0;
 
     const payload = {
@@ -99,20 +165,54 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    if (session.status === 'completed') {
-      const endScreenRules = session.config?.end_screen_rules || DEFAULT_END_SCREEN_RULES;
-      const message = getEndScreenMessage(session.score, endScreenRules);
+    const correctAnswers = session.correct_answers || 0;
+    const totalQuestions = session.total_questions || 1;
+    const percentage = Math.round((correctAnswers / totalQuestions) * 100);
 
+    const config = session.config || {};
+    const endScreenCases = config.end_screen_cases as EndScreenCase[] | undefined;
+    const endScreenRules = config.end_screen_rules as EndScreenRule[] | undefined;
+    const screens = config.screens || {};
+    const endScreenConfig = screens.end || {};
+    const ctaConfig = endScreenConfig.cta as EndScreenCtaConfig | undefined;
+    const socialShareConfig = endScreenConfig.social_share as SocialShareConfig | undefined;
+
+    const caseMatch = getEndScreenMessageFromCases(percentage, endScreenCases || []);
+    const message = caseMatch?.message || getEndScreenMessageFromLegacyRules(percentage, endScreenRules || []);
+
+    let shareText: string | undefined;
+    if (socialShareConfig?.enabled && socialShareConfig.share_text_template) {
+      const templateToUse = caseMatch?.shareTextOverride || socialShareConfig.share_text_template;
+      shareText = resolveShareText(
+        templateToUse,
+        correctAnswers,
+        totalQuestions,
+        percentage,
+        message,
+        config.shell_slug || 'Quiz'
+      );
+    }
+
+    const responseData = {
+      score: session.score,
+      total: totalQuestions,
+      percentage,
+      message,
+      correct_answers: correctAnswers,
+      share_text: shareText,
+      cta: ctaConfig?.enabled ? { enabled: true, label: ctaConfig.label || 'Continue' } : undefined,
+      social_share: socialShareConfig?.enabled ? {
+        enabled: true,
+        share_text: shareText || '',
+        share_image_url: socialShareConfig.share_image_url || '',
+        hashtags: socialShareConfig.hashtags || [],
+        fallback_url: socialShareConfig.fallback_url || '',
+      } : undefined,
+    };
+
+    if (session.status === 'completed') {
       return new Response(
-        JSON.stringify({
-          success: true,
-          data: {
-            score: session.score,
-            total: session.total_questions,
-            message,
-            correct_answers: session.correct_answers,
-          },
-        }),
+        JSON.stringify({ success: true, data: responseData }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -140,21 +240,10 @@ Deno.serve(async (req: Request) => {
     session.status = 'completed';
     session.completed_at = new Date().toISOString();
 
-    const endScreenRules = session.config?.end_screen_rules || DEFAULT_END_SCREEN_RULES;
-    const message = getEndScreenMessage(session.score, endScreenRules);
-
     EdgeRuntime.waitUntil(recordGamePlayOnPlatform(session));
 
     return new Response(
-      JSON.stringify({
-        success: true,
-        data: {
-          score: session.score,
-          total: session.total_questions,
-          message,
-          correct_answers: session.correct_answers,
-        },
-      }),
+      JSON.stringify({ success: true, data: responseData }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {

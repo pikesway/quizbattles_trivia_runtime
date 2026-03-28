@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Share2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { GameStage, StageHeader, StageBody, StageFooter } from './runtime/GameStage';
 import {
@@ -135,6 +136,28 @@ export function TriviaGame() {
     setError('');
   }
 
+  async function handleShare() {
+    if (!completionData?.social_share?.enabled) return;
+
+    const shareText = completionData.social_share.share_text;
+    const url = completionData.social_share.fallback_url || window.location.href;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Quiz Results',
+          text: shareText,
+          url,
+        });
+      } catch {
+      }
+    } else {
+      const hashtags = (completionData.social_share.hashtags || []).join(',');
+      const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(url)}${hashtags ? `&hashtags=${encodeURIComponent(hashtags)}` : ''}`;
+      window.open(twitterUrl, '_blank', 'width=550,height=420');
+    }
+  }
+
   const getBackgroundGradient = () => {
     if (gameState === 'start') return 'linear-gradient(to bottom right, #3B82F6, #2563EB)';
     if (gameState === 'completed') return 'linear-gradient(to bottom right, #10B981, #059669)';
@@ -181,18 +204,39 @@ export function TriviaGame() {
           <StageBody className="flex flex-col items-center justify-center px-6">
             <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-sm text-center">
               <h1 className="text-3xl sm:text-4xl font-bold text-gray-800 mb-4">Game Complete!</h1>
-              <div className="mb-6">
+              <div className="mb-4">
                 <p className="text-5xl sm:text-6xl font-bold text-green-600 mb-2">
                   {completionData.score}/{completionData.total}
                 </p>
+                <p className="text-2xl font-bold text-green-500 mb-2">
+                  {completionData.percentage}%
+                </p>
                 <p className="text-lg sm:text-xl text-gray-700">{completionData.message}</p>
               </div>
-              <button
-                onClick={resetGame}
-                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 sm:py-4 px-6 rounded-xl transition duration-200 active:scale-95"
-              >
-                Play Again
-              </button>
+              <div className="space-y-3">
+                {completionData.cta?.enabled && (
+                  <button
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 sm:py-4 px-6 rounded-xl transition duration-200 active:scale-95"
+                  >
+                    {completionData.cta.label || 'Continue'}
+                  </button>
+                )}
+                {completionData.social_share?.enabled && (
+                  <button
+                    onClick={handleShare}
+                    className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 sm:py-4 px-6 rounded-xl transition duration-200 active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <Share2 className="w-5 h-5" />
+                    Share Results
+                  </button>
+                )}
+                <button
+                  onClick={resetGame}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 sm:py-4 px-6 rounded-xl transition duration-200 active:scale-95"
+                >
+                  Play Again
+                </button>
+              </div>
             </div>
           </StageBody>
         </div>
@@ -228,7 +272,7 @@ export function TriviaGame() {
         <StageBody className="flex flex-col px-4 py-4">
           {currentQuestion && (
             <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-6 flex-1 flex flex-col min-h-0">
-              <h2 className="text-lg sm:text-xl font-bold text-gray-800 mb-4 flex-shrink-0">
+              <h2 className="text-lg sm:text-xl font-bold text-gray-800 mb-4 flex-shrink-0 text-center">
                 {currentQuestion.question_text}
               </h2>
 
@@ -239,7 +283,7 @@ export function TriviaGame() {
                       <button
                         key={answer.answer_id}
                         onClick={() => setSelectedAnswer(answer.answer_id)}
-                        className={`w-full text-left p-3 sm:p-4 rounded-xl border-2 transition duration-200 text-sm sm:text-base ${
+                        className={`w-full text-center p-3 sm:p-4 rounded-xl border-2 transition duration-200 text-sm sm:text-base ${
                           selectedAnswer === answer.answer_id
                             ? 'border-blue-600 bg-blue-50'
                             : 'border-gray-200 hover:border-blue-300'

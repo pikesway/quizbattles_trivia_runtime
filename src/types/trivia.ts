@@ -71,6 +71,7 @@ export interface GameInstanceConfig {
   };
   scoring_mode: 'accuracy_only';
   end_screen_rules: EndScreenRule[];
+  end_screen_cases?: EndScreenCaseRuntime[];
   lead_capture: LeadCaptureConfig;
   ui: {
     background_url: string;
@@ -81,6 +82,14 @@ export interface EndScreenRule {
   min: number;
   max: number;
   text: string;
+}
+
+export interface EndScreenCaseRuntime {
+  id: string;
+  min_percentage: number;
+  max_percentage: number | null;
+  message: string;
+  share_text_override: string | null;
 }
 
 export type LeadFieldType = 'name' | 'email' | 'phone' | 'text';
@@ -173,8 +182,21 @@ export interface SubmitAnswerResponse {
 export interface CompleteSessionResponse {
   score: number;
   total: number;
+  percentage: number;
   message: string;
   correct_answers: number;
+  share_text?: string;
+  cta?: {
+    enabled: boolean;
+    label: string;
+  };
+  social_share?: {
+    enabled: boolean;
+    share_text: string;
+    share_image_url: string;
+    hashtags: string[];
+    fallback_url: string;
+  };
 }
 
 export interface LeadCaptureRequest {

@@ -1,6 +1,8 @@
 import { ShellRepository } from '../repositories/shellRepository';
 import { QuestionBankRepository } from '../repositories/questionBankRepository';
 import { CampaignQuestionSetRepository } from '../repositories/campaignQuestionSetRepository';
+import * as endScreenCaseRepository from '../repositories/endScreenCaseRepository';
+import { casesToSnapshots } from './endScreenCaseService';
 import {
   TriviaShell,
   ResolvedShellConfig,
@@ -9,6 +11,7 @@ import {
   SelectionMode,
   CampaignQuestionSet,
   AuthoredQuestion,
+  EndScreenCaseSnapshot,
 } from '../../types/authoring';
 import { QuestionSnapshot, GameInstanceConfig, LeadCaptureConfig } from '../../types/trivia';
 
@@ -46,6 +49,7 @@ export class ShellConfigResolver {
     platformOverrides?: PlatformOverrides
   ): Promise<ResolvedShellConfig> {
     const shell = await this.getShell(shellIdOrSlug);
+    const endScreenCases = await this.resolveEndScreenCases(shell.id);
 
     const resolved: ResolvedShellConfig = {
       shell_id: shell.id,
@@ -61,9 +65,15 @@ export class ShellConfigResolver {
       backgrounds: shell.config.backgrounds,
       screens: shell.config.screens,
       score_range_messages: shell.config.score_range_messages,
+      end_screen_cases: endScreenCases,
     };
 
     return resolved;
+  }
+
+  private async resolveEndScreenCases(shellId: string): Promise<EndScreenCaseSnapshot[]> {
+    const cases = await endScreenCaseRepository.getEnabledEndScreenCasesByShellId(shellId);
+    return casesToSnapshots(cases);
   }
 
   async resolveQuestionSet(
@@ -128,6 +138,7 @@ export class ShellConfigResolver {
         max: msg.max,
         text: msg.message,
       })),
+      end_screen_cases: resolved.end_screen_cases,
       lead_capture: platformLeadCapture || shellLeadCapture,
       ui: {
         background_url: background,

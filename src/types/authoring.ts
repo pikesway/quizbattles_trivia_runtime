@@ -94,15 +94,32 @@ export interface LeadFormConfig {
   submit_label: string;
 }
 
+export type GameScreenSpacing = 'compact' | 'comfortable' | 'spacious';
+
 export interface GameScreenConfig {
   show_progress_bar: boolean;
   show_question_number: boolean;
+  spacing: GameScreenSpacing;
+}
+
+export interface EndScreenCtaConfig {
+  enabled: boolean;
+  label: string;
+}
+
+export interface SocialShareConfig {
+  enabled: boolean;
+  share_text_template: string;
+  share_image_url: string;
+  hashtags: string[];
+  fallback_url: string;
 }
 
 export interface EndScreenConfig {
   headline_template: string;
   show_score_breakdown: boolean;
-  cta_placeholder_enabled: boolean;
+  cta: EndScreenCtaConfig;
+  social_share: SocialShareConfig;
 }
 
 export interface FeedbackScreenConfig {
@@ -123,6 +140,44 @@ export interface ScoreRangeMessage {
   min: number;
   max: number;
   message: string;
+}
+
+export interface EndScreenCase {
+  id: string;
+  shell_id: string;
+  min_percentage: number;
+  max_percentage: number | null;
+  message: string;
+  enabled: boolean;
+  sort_order: number;
+  share_text_override: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateEndScreenCaseInput {
+  min_percentage: number;
+  max_percentage: number | null;
+  message: string;
+  enabled?: boolean;
+  sort_order?: number;
+  share_text_override?: string | null;
+}
+
+export interface UpdateEndScreenCaseInput {
+  min_percentage?: number;
+  max_percentage?: number | null;
+  message?: string;
+  enabled?: boolean;
+  sort_order?: number;
+  share_text_override?: string | null;
+}
+
+export interface EndScreenCaseImportRow {
+  min_percentage: string;
+  max_percentage: string;
+  message: string;
+  enabled: string;
 }
 
 export interface ShellConfig {
@@ -215,6 +270,14 @@ export interface CampaignQuestionSet {
   created_at: string;
 }
 
+export interface EndScreenCaseSnapshot {
+  id: string;
+  min_percentage: number;
+  max_percentage: number | null;
+  message: string;
+  share_text_override: string | null;
+}
+
 export interface ResolvedShellConfig {
   shell_id: string;
   shell_slug: string;
@@ -229,6 +292,7 @@ export interface ResolvedShellConfig {
   backgrounds: ShellBackgrounds;
   screens: ShellScreens;
   score_range_messages: ScoreRangeMessage[];
+  end_screen_cases: EndScreenCaseSnapshot[];
 }
 
 export interface AuthoredQuestion {

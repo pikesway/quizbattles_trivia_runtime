@@ -1,6 +1,7 @@
 import { ShellRepository } from '../repositories/shellRepository';
 import { QuestionBankRepository } from '../repositories/questionBankRepository';
 import { QuestionBankService } from './questionBankService';
+import * as endScreenCaseService from './endScreenCaseService';
 import {
   TriviaShell,
   ValidationResult,
@@ -10,7 +11,10 @@ import {
   DifficultyLevel,
   MobileFitWarning,
   APPROVED_FONTS,
+  GameScreenSpacing,
 } from '../../types/authoring';
+
+const VALID_SPACING_VALUES: GameScreenSpacing[] = ['compact', 'comfortable', 'spacious'];
 
 export class ShellValidationService {
   private shellRepo: ShellRepository;
@@ -45,9 +49,12 @@ export class ShellValidationService {
     this.validateScoreRangeMessages(shell, blockingErrors, warnings);
     this.validateTheme(shell, blockingErrors, warnings);
     this.validateBackgrounds(shell, warnings);
-    this.validateScreenConfig(shell, blockingErrors);
+    this.validateScreenConfig(shell, blockingErrors, warnings);
+    this.validateGameScreenConfig(shell, blockingErrors, warnings);
+    this.validateSocialShareConfig(shell, warnings);
 
     await this.validateQuestionSupply(shell, blockingErrors, warnings);
+    await this.validateEndScreenCases(shellId, blockingErrors, warnings);
 
     return {
       is_valid: blockingErrors.length === 0,
@@ -384,7 +391,11 @@ export class ShellValidationService {
     }
   }
 
-  private validateScreenConfig(shell: TriviaShell, errors: ValidationIssue[]): void {
+  private validateScreenConfig(
+    shell: TriviaShell,
+    errors: ValidationIssue[],
+    _warnings: ValidationIssue[]
+  ): void {
     const screens = shell.config?.screens;
 
     if (!screens) {
@@ -632,5 +643,71 @@ export class ShellValidationService {
       return /^rgba?\([^)]+\)$/.test(color);
     }
     return false;
+  }
+
+  private validateGameScreenConfig(
+    shell: TriviaShell,
+    errors: ValidationIssue[],
+    _warnings: ValidationIssue[]
+  ): void {
+    const gameConfig = shell.config?.screens?.game;
+    if (!gameConfig) return;
+
+    const spacing = (gameConfig as { spacing?: GameScreenSpacing }).spacing;
+    if (spacing && !VALID_SPACING_VALUES.includes(spacing)) {
+      errors.push({
+        code: 'INVALID_GAME_SPACING',
+        message: `Invalid game screen spacing: ${spacing}. Must be one of: ${VALID_SPACING_VALUES.join(', ')}`,
+        field: 'config.screens.game.spacing',
+        context: { valid_values: VALID_SPACING_VALUES },
+      });
+    }
+  }
+
+  private validateSocialShareConfig(
+    shell: TriviaShell,
+    warnings: ValidationIssue[]
+  ): void {
+    const socialShare = shell.config?.screens?.end?.social_share;
+    if (!socialShare?.enabled) return;
+
+    if (!socialShare.share_text_template || socialShare.share_text_template.trim().length === 0) {
+      warnings.push({
+        code: 'EMPTY_SHARE_TEXT_TEMPLATE',
+        message: 'Social sharing is enabled but no share text template is configured',
+        field: 'config.screens.end.social_share.share_text_template',
+      });
+    }
+
+    const validTokens = ['{score}', '{total}', '{percentage}', '{quiz_name}', '{result_message}'];
+    const template = socialShare.share_text_template || '';
+    const tokenRegex = /\{([^}]+)\}/g;
+    let match;
+    while ((match = tokenRegex.exec(template)) !== null) {
+      const token = `{${match[1]}}`;
+      if (!validTokens.includes(token)) {
+        warnings.push({
+          code: 'INVALID_SHARE_TEXT_TOKEN',
+          message: `Unknown token in share text template: ${token}. Valid tokens: ${validTokens.join(', ')}`,
+          field: 'config.screens.end.social_share.share_text_template',
+        });
+      }
+    }
+  }
+
+  private async validateEndScreenCases(
+    shellId: string,
+    errors: ValidationIssue[],
+    warnings: ValidationIssue[]
+  ): Promise<void> {
+    const validation = await endScreenCaseService.validateEndScreenCases(shellId);
+
+    for (const error of validation.errors) {
+      errors.push(error);
+    }
+
+    for (const warning of validation.warnings) {
+      warnings.push(warning);
+    }
   }
 }
