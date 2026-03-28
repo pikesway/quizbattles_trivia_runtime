@@ -9,13 +9,36 @@ import {
   CompleteSessionResponse,
 } from '../types/trivia';
 
-type GameScreenSpacing = 'compact' | 'comfortable' | 'spacious';
+type GameScreenSpacingPreset = 'compact' | 'comfortable' | 'spacious';
+type GameScreenSpacing = GameScreenSpacingPreset | 'custom';
 
-const SPACING_CONFIG: Record<GameScreenSpacing, { spacerHeight: number; answerGap: string }> = {
-  compact: { spacerHeight: 12, answerGap: 'space-y-1.5' },
-  comfortable: { spacerHeight: 24, answerGap: 'space-y-2 sm:space-y-3' },
-  spacious: { spacerHeight: 40, answerGap: 'space-y-4' },
+const SPACING_PRESETS: Record<GameScreenSpacingPreset, number> = {
+  compact: 12,
+  comfortable: 24,
+  spacious: 40,
 };
+
+function getSpacingConfig(spacing: GameScreenSpacing = 'comfortable', customValue?: number) {
+  if (spacing === 'custom' && customValue !== undefined) {
+    const height = Math.max(8, Math.min(60, customValue));
+    if (height <= 16) {
+      return { spacerHeight: height, answerGap: 'space-y-1.5' };
+    } else if (height >= 32) {
+      return { spacerHeight: height, answerGap: 'space-y-4' };
+    }
+    return { spacerHeight: height, answerGap: 'space-y-2 sm:space-y-3' };
+  }
+  switch (spacing) {
+    case 'compact':
+      return { spacerHeight: SPACING_PRESETS.compact, answerGap: 'space-y-1.5' };
+    case 'spacious':
+      return { spacerHeight: SPACING_PRESETS.spacious, answerGap: 'space-y-4' };
+    default:
+      return { spacerHeight: SPACING_PRESETS.comfortable, answerGap: 'space-y-2 sm:space-y-3' };
+  }
+}
+
+const SPACING_CONFIG = getSpacingConfig('comfortable');
 
 type GameState = 'start' | 'playing' | 'answered' | 'completed';
 

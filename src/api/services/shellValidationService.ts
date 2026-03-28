@@ -12,9 +12,10 @@ import {
   MobileFitWarning,
   APPROVED_FONTS,
   GameScreenSpacing,
+  SPACING_LIMITS,
 } from '../../types/authoring';
 
-const VALID_SPACING_VALUES: GameScreenSpacing[] = ['compact', 'comfortable', 'spacious'];
+const VALID_SPACING_VALUES: GameScreenSpacing[] = ['compact', 'comfortable', 'spacious', 'custom'];
 
 export class ShellValidationService {
   private shellRepo: ShellRepository;
@@ -653,7 +654,9 @@ export class ShellValidationService {
     const gameConfig = shell.config?.screens?.game;
     if (!gameConfig) return;
 
-    const spacing = (gameConfig as { spacing?: GameScreenSpacing }).spacing;
+    const spacing = (gameConfig as { spacing?: GameScreenSpacing; custom_spacing_value?: number }).spacing;
+    const customValue = (gameConfig as { custom_spacing_value?: number }).custom_spacing_value;
+
     if (spacing && !VALID_SPACING_VALUES.includes(spacing)) {
       errors.push({
         code: 'INVALID_GAME_SPACING',
@@ -661,6 +664,23 @@ export class ShellValidationService {
         field: 'config.screens.game.spacing',
         context: { valid_values: VALID_SPACING_VALUES },
       });
+    }
+
+    if (spacing === 'custom') {
+      if (customValue === undefined) {
+        errors.push({
+          code: 'MISSING_CUSTOM_SPACING_VALUE',
+          message: 'Custom spacing requires a custom_spacing_value to be set',
+          field: 'config.screens.game.custom_spacing_value',
+        });
+      } else if (customValue < SPACING_LIMITS.min || customValue > SPACING_LIMITS.max) {
+        errors.push({
+          code: 'INVALID_CUSTOM_SPACING_VALUE',
+          message: `Custom spacing value must be between ${SPACING_LIMITS.min} and ${SPACING_LIMITS.max}. Got: ${customValue}`,
+          field: 'config.screens.game.custom_spacing_value',
+          context: { min: SPACING_LIMITS.min, max: SPACING_LIMITS.max, value: customValue },
+        });
+      }
     }
   }
 

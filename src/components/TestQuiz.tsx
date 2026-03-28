@@ -3,7 +3,14 @@ import { CheckCircle, XCircle, Clock, AlertTriangle, Share2 } from 'lucide-react
 import { supabase } from '../lib/supabase';
 import { GameStage, StageHeader, StageBody, StageFooter } from './runtime/GameStage';
 
-type GameScreenSpacing = 'compact' | 'comfortable' | 'spacious';
+type GameScreenSpacingPreset = 'compact' | 'comfortable' | 'spacious';
+type GameScreenSpacing = GameScreenSpacingPreset | 'custom';
+
+const SPACING_PRESETS: Record<GameScreenSpacingPreset, number> = {
+  compact: 12,
+  comfortable: 24,
+  spacious: 40,
+};
 
 interface TestQuizProps {
   token: string;
@@ -28,7 +35,7 @@ interface ShellConfig {
   };
   screens: {
     start: { headline: string; body: string; button_label: string };
-    game: { show_progress_bar: boolean; show_question_number: boolean; spacing?: GameScreenSpacing };
+    game: { show_progress_bar: boolean; show_question_number: boolean; spacing?: GameScreenSpacing; custom_spacing_value?: number };
     end: {
       headline_template: string;
       show_score_breakdown: boolean;
@@ -382,18 +389,27 @@ export function TestQuiz({ token }: TestQuizProps) {
   const backgrounds = config?.backgrounds;
   const screens = config?.screens;
 
-  const getSpacingConfig = (spacing: GameScreenSpacing = 'comfortable') => {
+  const getSpacingConfig = (spacing: GameScreenSpacing = 'comfortable', customValue?: number) => {
+    if (spacing === 'custom' && customValue !== undefined) {
+      const height = Math.max(8, Math.min(60, customValue));
+      if (height <= 16) {
+        return { spacerHeight: height, answerGap: 'space-y-1.5', answerPadding: 'p-2.5 sm:p-3' };
+      } else if (height >= 32) {
+        return { spacerHeight: height, answerGap: 'space-y-4', answerPadding: 'p-4 sm:p-5' };
+      }
+      return { spacerHeight: height, answerGap: 'space-y-2 sm:space-y-3', answerPadding: 'p-3 sm:p-4' };
+    }
     switch (spacing) {
       case 'compact':
-        return { spacerHeight: 12, answerGap: 'space-y-1.5', answerPadding: 'p-2.5 sm:p-3' };
+        return { spacerHeight: SPACING_PRESETS.compact, answerGap: 'space-y-1.5', answerPadding: 'p-2.5 sm:p-3' };
       case 'spacious':
-        return { spacerHeight: 40, answerGap: 'space-y-4', answerPadding: 'p-4 sm:p-5' };
+        return { spacerHeight: SPACING_PRESETS.spacious, answerGap: 'space-y-4', answerPadding: 'p-4 sm:p-5' };
       default:
-        return { spacerHeight: 24, answerGap: 'space-y-2 sm:space-y-3', answerPadding: 'p-3 sm:p-4' };
+        return { spacerHeight: SPACING_PRESETS.comfortable, answerGap: 'space-y-2 sm:space-y-3', answerPadding: 'p-3 sm:p-4' };
     }
   };
 
-  const spacingConfig = getSpacingConfig(screens?.game?.spacing);
+  const spacingConfig = getSpacingConfig(screens?.game?.spacing, screens?.game?.custom_spacing_value);
 
   function getEndScreenMessage(percentage: number): string {
     if (endScreenCases.length > 0) {

@@ -1,9 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronUp, GripVertical, Upload, AlertTriangle, Check } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronUp, GripVertical, Upload, AlertTriangle, Check, Sliders } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ImageInput } from './ImageInput';
 
-type GameScreenSpacing = 'compact' | 'comfortable' | 'spacious';
+type GameScreenSpacingPreset = 'compact' | 'comfortable' | 'spacious';
+type GameScreenSpacing = GameScreenSpacingPreset | 'custom';
+
+const SPACING_LIMITS = {
+  min: 8,
+  max: 60,
+  presets: {
+    compact: 12,
+    comfortable: 24,
+    spacious: 40,
+  },
+} as const;
 
 interface LeadFormField {
   type: 'name' | 'email' | 'phone' | 'text';
@@ -52,7 +63,7 @@ interface EndScreenCase {
 interface ScreensConfig {
   start: { headline: string; body: string; button_label: string };
   lead: LeadFormConfig;
-  game: { show_progress_bar: boolean; show_question_number: boolean; spacing?: GameScreenSpacing };
+  game: { show_progress_bar: boolean; show_question_number: boolean; spacing?: GameScreenSpacing; custom_spacing_value?: number };
   end: { headline_template: string; show_score_breakdown: boolean; cta?: EndScreenCtaConfig; social_share?: SocialShareConfig };
   feedback: { correct_headline: string; incorrect_headline: string; show_explanation: boolean };
 }
@@ -67,7 +78,7 @@ interface ScreensEditorProps {
   onConfigChange: (path: string, value: unknown) => void;
 }
 
-const SPACING_OPTIONS: { value: GameScreenSpacing; label: string; description: string }[] = [
+const SPACING_OPTIONS: { value: GameScreenSpacingPreset; label: string; description: string }[] = [
   { value: 'compact', label: 'Compact', description: 'Tight spacing for longer questions' },
   { value: 'comfortable', label: 'Comfortable', description: 'Balanced spacing (default)' },
   { value: 'spacious', label: 'Spacious', description: 'More breathing room' },
@@ -505,12 +516,15 @@ export function ScreensEditor({
             <div className="border-t border-gray-200 pt-4">
               <h4 className="text-sm font-medium text-gray-700 mb-3">Layout Spacing</h4>
               <p className="text-xs text-gray-500 mb-3">Controls the spacing between question and answer options</p>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-4 gap-2">
                 {SPACING_OPTIONS.map(opt => (
                   <button
                     key={opt.value}
                     type="button"
-                    onClick={() => onConfigChange('config.screens.game.spacing', opt.value)}
+                    onClick={() => {
+                      onConfigChange('config.screens.game.spacing', opt.value);
+                      onConfigChange('config.screens.game.custom_spacing_value', undefined);
+                    }}
                     className={`p-3 rounded-lg border-2 text-left transition-colors ${
                       (config.game?.spacing || 'comfortable') === opt.value
                         ? 'border-blue-500 bg-blue-50'
@@ -521,7 +535,71 @@ export function ScreensEditor({
                     <span className="block text-xs text-gray-500 mt-0.5">{opt.description}</span>
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    onConfigChange('config.screens.game.spacing', 'custom');
+                    if (!config.game?.custom_spacing_value) {
+                      onConfigChange('config.screens.game.custom_spacing_value', SPACING_LIMITS.presets.comfortable);
+                    }
+                  }}
+                  className={`p-3 rounded-lg border-2 text-left transition-colors ${
+                    config.game?.spacing === 'custom'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <span className="block text-sm font-medium text-gray-900 flex items-center gap-1">
+                    <Sliders className="w-3.5 h-3.5" />
+                    Custom
+                  </span>
+                  <span className="block text-xs text-gray-500 mt-0.5">Fine-tune manually</span>
+                </button>
               </div>
+
+              {config.game?.spacing === 'custom' && (
+                <div className="mt-4 p-4 bg-white rounded-lg border border-gray-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium text-gray-700">Advanced Spacing</label>
+                    <span className="text-sm font-mono text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                      {config.game?.custom_spacing_value ?? SPACING_LIMITS.presets.comfortable}px
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="range"
+                      min={SPACING_LIMITS.min}
+                      max={SPACING_LIMITS.max}
+                      step={1}
+                      value={config.game?.custom_spacing_value ?? SPACING_LIMITS.presets.comfortable}
+                      onChange={e => onConfigChange('config.screens.game.custom_spacing_value', parseInt(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                    <div className="flex justify-between mt-1 text-xs text-gray-400">
+                      <span>{SPACING_LIMITS.min}px</span>
+                      <span>{SPACING_LIMITS.max}px</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-3">
+                    <span className="text-xs text-gray-500">Presets:</span>
+                    {SPACING_OPTIONS.map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => onConfigChange('config.screens.game.custom_spacing_value', SPACING_LIMITS.presets[opt.value])}
+                        className={`text-xs px-2 py-0.5 rounded transition-colors ${
+                          config.game?.custom_spacing_value === SPACING_LIMITS.presets[opt.value]
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {opt.label} ({SPACING_LIMITS.presets[opt.value]}px)
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <p className="text-xs text-gray-400 mt-2">
                 Note: Runtime will auto-adjust spacing if content overflows the screen
               </p>

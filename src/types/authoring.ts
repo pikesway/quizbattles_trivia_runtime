@@ -94,12 +94,24 @@ export interface LeadFormConfig {
   submit_label: string;
 }
 
-export type GameScreenSpacing = 'compact' | 'comfortable' | 'spacious';
+export type GameScreenSpacingPreset = 'compact' | 'comfortable' | 'spacious';
+export type GameScreenSpacing = GameScreenSpacingPreset | 'custom';
+
+export const SPACING_LIMITS = {
+  min: 8,
+  max: 60,
+  presets: {
+    compact: 12,
+    comfortable: 24,
+    spacious: 40,
+  },
+} as const;
 
 export interface GameScreenConfig {
   show_progress_bar: boolean;
   show_question_number: boolean;
   spacing: GameScreenSpacing;
+  custom_spacing_value?: number;
 }
 
 export interface EndScreenCtaConfig {
