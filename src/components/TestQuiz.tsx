@@ -108,7 +108,7 @@ export function TestQuiz({ token }: TestQuizProps) {
         .from('trivia_shells')
         .select('*')
         .eq('id', tokenData.shell_id)
-        .single();
+        .maybeSingle();
 
       if (shellError) throw shellError;
       if (!shellData) {
@@ -239,7 +239,7 @@ export function TestQuiz({ token }: TestQuizProps) {
       .from('trivia_test_tokens')
       .select('id')
       .eq('token', token)
-      .single();
+      .maybeSingle();
 
     if (tokenData) {
       await startTestSession(shell, tokenData.id);
