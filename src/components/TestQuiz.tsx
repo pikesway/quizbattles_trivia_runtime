@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { GameStage, StageHeader, StageBody, StageFooter } from './runtime/GameStage';
 
 interface TestQuizProps {
   token: string;
@@ -360,247 +361,249 @@ export function TestQuiz({ token }: TestQuizProps) {
 
   if (screen === 'loading') {
     return (
-      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-gray-900">
-        <div className="text-white text-center">
-          <div className="animate-spin w-8 h-8 border-2 border-white border-t-transparent rounded-full mx-auto mb-4" />
-          <p>Loading test quiz...</p>
-        </div>
-      </div>
+      <GameStage>
+        <StageBody className="flex items-center justify-center bg-gray-900">
+          <div className="text-white text-center">
+            <div className="animate-spin w-8 h-8 border-2 border-white border-t-transparent rounded-full mx-auto mb-4" />
+            <p>Loading test quiz...</p>
+          </div>
+        </StageBody>
+      </GameStage>
     );
   }
 
   if (screen === 'error') {
     return (
-      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-gray-900 p-4">
-        <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 text-center">
-          <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Unable to Load Quiz</h2>
-          <p className="text-gray-600">{error}</p>
-        </div>
-      </div>
+      <GameStage>
+        <StageBody className="flex items-center justify-center bg-gray-900 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4 text-center">
+            <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Unable to Load Quiz</h2>
+            <p className="text-gray-600 text-sm">{error}</p>
+          </div>
+        </StageBody>
+      </GameStage>
     );
   }
 
   return (
-    <div
-      className="min-h-screen min-h-[100dvh] flex flex-col overflow-x-hidden"
-      style={{
-        backgroundImage: `url(${getBackground()})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        fontFamily: theme?.font_family || 'Inter',
-      }}
+    <GameStage
+      backgroundImage={getBackground()}
+      overlayColor={theme?.overlay_tint || 'rgba(0,0,0,0.5)'}
     >
-      <div className="absolute top-4 left-4 z-10 safe-area-inset-left">
-        <span className="px-3 py-1 bg-orange-500 text-white text-xs font-medium rounded-full">
-          TEST MODE
-        </span>
-      </div>
+      <div className="flex flex-col h-full" style={{ fontFamily: theme?.font_family || 'Inter' }}>
+        <StageHeader className="px-4 pt-3 pb-2">
+          <span className="inline-block px-3 py-1 bg-orange-500 text-white text-xs font-medium rounded-full">
+            TEST MODE
+          </span>
+        </StageHeader>
 
-      <div
-        className="flex-1 flex flex-col items-center justify-center px-4 py-6 safe-area-inset-bottom"
-        style={{ backgroundColor: theme?.overlay_tint || 'rgba(0,0,0,0.5)' }}
-      >
-        {screen === 'start' && screens && (
-          <div className="text-center max-w-md">
-            <h1
-              className="text-3xl font-bold mb-4"
-              style={{ color: theme?.primary_text_color }}
-            >
-              {screens.start.headline}
-            </h1>
-            <p
-              className="text-lg mb-8"
-              style={{ color: theme?.secondary_text_color }}
-            >
-              {screens.start.body}
-            </p>
-            <button
-              onClick={handleStartClick}
-              className="px-8 py-3 text-lg font-medium rounded-lg transition-transform hover:scale-105"
-              style={{
-                backgroundColor: theme?.button_fill_color,
-                color: theme?.button_text_color,
-              }}
-            >
-              {screens.start.button_label}
-            </button>
-          </div>
-        )}
-
-        {screen === 'game' && session && (
-          <div className="w-full max-w-lg px-2">
-            <div className="mb-6">
-              <div
-                className="flex justify-between text-sm mb-2"
+        <StageBody className="flex flex-col px-4">
+          {screen === 'start' && screens && (
+            <div className="flex-1 flex flex-col items-center justify-center text-center">
+              <h1
+                className="text-2xl sm:text-3xl font-bold mb-3"
+                style={{ color: theme?.primary_text_color }}
+              >
+                {screens.start.headline}
+              </h1>
+              <p
+                className="text-base sm:text-lg mb-6"
                 style={{ color: theme?.secondary_text_color }}
               >
-                <span>Question {session.current_index + 1} of {session.total_questions}</span>
-                <span className="flex items-center gap-1">
-                  <Clock className="w-4 h-4" />
-                  {timeRemaining}s
-                </span>
+                {screens.start.body}
+              </p>
+              <button
+                onClick={handleStartClick}
+                className="px-8 py-3 text-base font-medium rounded-lg transition-transform active:scale-95"
+                style={{
+                  backgroundColor: theme?.button_fill_color,
+                  color: theme?.button_text_color,
+                }}
+              >
+                {screens.start.button_label}
+              </button>
+            </div>
+          )}
+
+          {screen === 'game' && session && (
+            <div className="flex-1 flex flex-col min-h-0">
+              <div className="flex-shrink-0 mb-3">
+                <div
+                  className="flex justify-between text-xs sm:text-sm mb-2"
+                  style={{ color: theme?.secondary_text_color }}
+                >
+                  <span>Question {session.current_index + 1} of {session.total_questions}</span>
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-4 h-4" />
+                    {timeRemaining}s
+                  </span>
+                </div>
+                {screens?.game.show_progress_bar && (
+                  <div className="w-full bg-gray-600 rounded-full h-1.5">
+                    <div
+                      className="h-1.5 rounded-full transition-all"
+                      style={{
+                        width: `${((session.current_index + 1) / session.total_questions) * 100}%`,
+                        backgroundColor: theme?.button_fill_color,
+                      }}
+                    />
+                  </div>
+                )}
               </div>
-              {screens?.game.show_progress_bar && (
-                <div className="w-full bg-gray-600 rounded-full h-2">
-                  <div
-                    className="h-2 rounded-full transition-all"
-                    style={{
-                      width: `${((session.current_index + 1) / session.total_questions) * 100}%`,
-                      backgroundColor: theme?.button_fill_color,
-                    }}
-                  />
+
+              <h2
+                className="text-lg sm:text-xl font-medium mb-4 flex-shrink-0"
+                style={{ color: theme?.primary_text_color }}
+              >
+                {session.question_set[session.current_index].question_text}
+              </h2>
+
+              <div className="flex-1 flex flex-col justify-center min-h-0 overflow-y-auto">
+                <div className="space-y-2 sm:space-y-3">
+                  {session.question_set[session.current_index].answers.map(answer => {
+                    const isSelected = selectedAnswerId === answer.id;
+                    const showResult = selectedAnswerId !== null;
+                    const isCorrect = answer.is_correct;
+
+                    let borderColor = 'rgba(255,255,255,0.2)';
+                    let bgColor = 'transparent';
+
+                    if (showResult) {
+                      if (isCorrect) {
+                        borderColor = theme?.correct_feedback_accent || '#48BB78';
+                        bgColor = 'rgba(72, 187, 120, 0.2)';
+                      } else if (isSelected && !isCorrect) {
+                        borderColor = theme?.incorrect_feedback_accent || '#F56565';
+                        bgColor = 'rgba(245, 101, 101, 0.2)';
+                      }
+                    } else if (isSelected) {
+                      borderColor = theme?.button_fill_color || '#3182CE';
+                      bgColor = 'rgba(255,255,255,0.1)';
+                    }
+
+                    return (
+                      <button
+                        key={answer.id}
+                        onClick={() => handleAnswerSelect(answer.id)}
+                        disabled={selectedAnswerId !== null}
+                        className="w-full p-3 sm:p-4 rounded-lg text-left border-2 transition-all disabled:cursor-default text-sm sm:text-base"
+                        style={{
+                          borderColor,
+                          backgroundColor: bgColor,
+                          color: theme?.primary_text_color,
+                        }}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="flex-1">{answer.answer_text}</span>
+                          {showResult && isCorrect && (
+                            <CheckCircle className="w-5 h-5 flex-shrink-0" style={{ color: theme?.correct_feedback_accent }} />
+                          )}
+                          {showResult && isSelected && !isCorrect && (
+                            <XCircle className="w-5 h-5 flex-shrink-0" style={{ color: theme?.incorrect_feedback_accent }} />
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {screen === 'feedback' && session && screens && (
+            <div className="flex-1 flex flex-col items-center justify-center text-center px-2">
+              {lastAnswerCorrect ? (
+                <CheckCircle
+                  className="w-14 h-14 sm:w-16 sm:h-16 mb-4"
+                  style={{ color: theme?.correct_feedback_accent }}
+                />
+              ) : (
+                <XCircle
+                  className="w-14 h-14 sm:w-16 sm:h-16 mb-4"
+                  style={{ color: theme?.incorrect_feedback_accent }}
+                />
+              )}
+              <h2
+                className="text-xl sm:text-2xl font-bold mb-3"
+                style={{ color: theme?.primary_text_color }}
+              >
+                {lastAnswerCorrect
+                  ? screens.feedback.correct_headline
+                  : screens.feedback.incorrect_headline}
+              </h2>
+              {screens.feedback.show_explanation && session.question_set[session.current_index].explanation && (
+                <p
+                  className="text-sm sm:text-base mb-6 max-w-sm"
+                  style={{ color: theme?.secondary_text_color }}
+                >
+                  {session.question_set[session.current_index].explanation}
+                </p>
+              )}
+              <button
+                onClick={moveToNext}
+                className="px-6 py-3 font-medium rounded-lg transition-transform active:scale-95"
+                style={{
+                  backgroundColor: theme?.button_fill_color,
+                  color: theme?.button_text_color,
+                }}
+              >
+                {session.current_index + 1 >= session.total_questions ? 'See Results' : 'Next Question'}
+              </button>
+            </div>
+          )}
+
+          {screen === 'end' && session && screens && (
+            <div className="flex-1 flex flex-col items-center justify-center text-center">
+              <h2
+                className="text-2xl sm:text-3xl font-bold mb-3"
+                style={{ color: theme?.primary_text_color }}
+              >
+                {screens.end.headline_template
+                  .replace('{score}', String(session.correct_answers))
+                  .replace('{total}', String(session.total_questions))}
+              </h2>
+              <p
+                className="text-4xl sm:text-5xl font-bold mb-3"
+                style={{ color: theme?.correct_feedback_accent }}
+              >
+                {Math.round((session.correct_answers / session.total_questions) * 100)}%
+              </p>
+              {config?.score_range_messages && (
+                <p
+                  className="text-base sm:text-lg mb-6"
+                  style={{ color: theme?.secondary_text_color }}
+                >
+                  {config.score_range_messages.find(
+                    m => {
+                      const pct = Math.round((session.correct_answers / session.total_questions) * 100);
+                      return pct >= m.min && pct <= m.max;
+                    }
+                  )?.message || 'Great job!'}
+                </p>
+              )}
+              {screens.end.show_score_breakdown && (
+                <div
+                  className="p-3 sm:p-4 rounded-lg mb-6"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}
+                >
+                  <p className="text-sm" style={{ color: theme?.secondary_text_color }}>
+                    Correct: {session.correct_answers} | Wrong: {session.total_questions - session.correct_answers}
+                  </p>
                 </div>
               )}
-            </div>
-
-            <h2
-              className="text-xl font-medium mb-6"
-              style={{ color: theme?.primary_text_color }}
-            >
-              {session.question_set[session.current_index].question_text}
-            </h2>
-
-            <div className="space-y-3">
-              {session.question_set[session.current_index].answers.map(answer => {
-                const isSelected = selectedAnswerId === answer.id;
-                const showResult = selectedAnswerId !== null;
-                const isCorrect = answer.is_correct;
-
-                let borderColor = 'rgba(255,255,255,0.2)';
-                let bgColor = 'transparent';
-
-                if (showResult) {
-                  if (isCorrect) {
-                    borderColor = theme?.correct_feedback_accent || '#48BB78';
-                    bgColor = 'rgba(72, 187, 120, 0.2)';
-                  } else if (isSelected && !isCorrect) {
-                    borderColor = theme?.incorrect_feedback_accent || '#F56565';
-                    bgColor = 'rgba(245, 101, 101, 0.2)';
-                  }
-                } else if (isSelected) {
-                  borderColor = theme?.button_fill_color || '#3182CE';
-                  bgColor = 'rgba(255,255,255,0.1)';
-                }
-
-                return (
-                  <button
-                    key={answer.id}
-                    onClick={() => handleAnswerSelect(answer.id)}
-                    disabled={selectedAnswerId !== null}
-                    className="w-full p-4 rounded-lg text-left border-2 transition-all disabled:cursor-default"
-                    style={{
-                      borderColor,
-                      backgroundColor: bgColor,
-                      color: theme?.primary_text_color,
-                    }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span>{answer.answer_text}</span>
-                      {showResult && isCorrect && (
-                        <CheckCircle className="w-5 h-5" style={{ color: theme?.correct_feedback_accent }} />
-                      )}
-                      {showResult && isSelected && !isCorrect && (
-                        <XCircle className="w-5 h-5" style={{ color: theme?.incorrect_feedback_accent }} />
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {screen === 'feedback' && session && screens && (
-          <div className="text-center max-w-md">
-            {lastAnswerCorrect ? (
-              <CheckCircle
-                className="w-16 h-16 mx-auto mb-4"
-                style={{ color: theme?.correct_feedback_accent }}
-              />
-            ) : (
-              <XCircle
-                className="w-16 h-16 mx-auto mb-4"
-                style={{ color: theme?.incorrect_feedback_accent }}
-              />
-            )}
-            <h2
-              className="text-2xl font-bold mb-4"
-              style={{ color: theme?.primary_text_color }}
-            >
-              {lastAnswerCorrect
-                ? screens.feedback.correct_headline
-                : screens.feedback.incorrect_headline}
-            </h2>
-            {screens.feedback.show_explanation && session.question_set[session.current_index].explanation && (
               <p
-                className="mb-6"
+                className="text-xs sm:text-sm"
                 style={{ color: theme?.secondary_text_color }}
               >
-                {session.question_set[session.current_index].explanation}
+                This was a test session. Results are not recorded.
               </p>
-            )}
-            <button
-              onClick={moveToNext}
-              className="px-6 py-3 font-medium rounded-lg"
-              style={{
-                backgroundColor: theme?.button_fill_color,
-                color: theme?.button_text_color,
-              }}
-            >
-              {session.current_index + 1 >= session.total_questions ? 'See Results' : 'Next Question'}
-            </button>
-          </div>
-        )}
+            </div>
+          )}
+        </StageBody>
 
-        {screen === 'end' && session && screens && (
-          <div className="text-center max-w-md">
-            <h2
-              className="text-3xl font-bold mb-4"
-              style={{ color: theme?.primary_text_color }}
-            >
-              {screens.end.headline_template
-                .replace('{score}', String(session.correct_answers))
-                .replace('{total}', String(session.total_questions))}
-            </h2>
-            <p
-              className="text-5xl font-bold mb-4"
-              style={{ color: theme?.correct_feedback_accent }}
-            >
-              {Math.round((session.correct_answers / session.total_questions) * 100)}%
-            </p>
-            {config?.score_range_messages && (
-              <p
-                className="text-lg mb-8"
-                style={{ color: theme?.secondary_text_color }}
-              >
-                {config.score_range_messages.find(
-                  m => {
-                    const pct = Math.round((session.correct_answers / session.total_questions) * 100);
-                    return pct >= m.min && pct <= m.max;
-                  }
-                )?.message || 'Great job!'}
-              </p>
-            )}
-            {screens.end.show_score_breakdown && (
-              <div
-                className="p-4 rounded-lg mb-6"
-                style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}
-              >
-                <p style={{ color: theme?.secondary_text_color }}>
-                  Correct: {session.correct_answers} | Wrong: {session.total_questions - session.correct_answers}
-                </p>
-              </div>
-            )}
-            <p
-              className="text-sm"
-              style={{ color: theme?.secondary_text_color }}
-            >
-              This was a test session. Results are not recorded.
-            </p>
-          </div>
-        )}
+        <StageFooter className="pb-4" />
       </div>
-    </div>
+    </GameStage>
   );
 }

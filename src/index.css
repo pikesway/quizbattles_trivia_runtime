@@ -1,3 +1,82 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --vh: 1vh;
+}
+
+html, body {
+  overscroll-behavior: none;
+}
+
+html.game-active,
+html.game-active body {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.game-stage-wrapper {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #000;
+  overflow: hidden;
+}
+
+.game-stage {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  height: calc(var(--vh, 1vh) * 100);
+  max-height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 768px) {
+  .game-stage {
+    height: min(calc(var(--vh, 1vh) * 100), 932px);
+    border-radius: 0;
+    box-shadow: 0 0 60px rgba(0, 0, 0, 0.5);
+  }
+}
+
+.game-stage-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.game-stage-scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  min-height: 0;
+}
+
+.game-stage-fixed {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+@supports (padding-top: env(safe-area-inset-top)) {
+  .game-stage {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
