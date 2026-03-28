@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronUp, GripVertical, Upload, AlertTriangle, Check } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { ImageInput } from './ImageInput';
 
 type GameScreenSpacing = 'compact' | 'comfortable' | 'spacious';
 
@@ -701,16 +702,13 @@ export function ScreensEditor({
                       ))}
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Share Image URL (optional)</label>
-                    <input
-                      type="text"
-                      value={config.end?.social_share?.share_image_url || ''}
-                      onChange={e => onConfigChange('config.screens.end.social_share.share_image_url', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                      placeholder="https://example.com/share-image.jpg"
-                    />
-                  </div>
+                  <ImageInput
+                    label="Share Image (optional)"
+                    value={config.end?.social_share?.share_image_url || ''}
+                    onChange={(url) => onConfigChange('config.screens.end.social_share.share_image_url', url)}
+                    folder="share-images"
+                    placeholder="https://example.com/share-image.jpg"
+                  />
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Hashtags (comma-separated)</label>
                     <input
