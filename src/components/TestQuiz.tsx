@@ -84,6 +84,14 @@ interface TestSession {
   current_question_started_at: string | null;
 }
 
+interface EndScreenCase {
+  id: string;
+  min_percentage: number;
+  max_percentage: number | null;
+  message: string;
+  enabled: boolean;
+}
+
 type Screen = 'loading' | 'error' | 'start' | 'game' | 'feedback' | 'end';
 
 export function TestQuiz({ token }: TestQuizProps) {
@@ -95,6 +103,7 @@ export function TestQuiz({ token }: TestQuizProps) {
   const [lastAnswerCorrect, setLastAnswerCorrect] = useState<boolean | null>(null);
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [timerActive, setTimerActive] = useState(false);
+  const [endScreenCases, setEndScreenCases] = useState<EndScreenCase[]>([]);
 
   const loadTestData = useCallback(async () => {
     try {
@@ -131,6 +140,14 @@ export function TestQuiz({ token }: TestQuizProps) {
         return;
       }
 
+      const { data: casesData } = await supabase
+        .from('trivia_end_screen_cases')
+        .select('id, min_percentage, max_percentage, message, enabled')
+        .eq('shell_id', tokenData.shell_id)
+        .eq('enabled', true)
+        .order('sort_order', { ascending: true });
+
+      setEndScreenCases(casesData || []);
       setShell(shellData);
       setScreen(shellData.is_start_screen_enabled ? 'start' : 'game');
 
@@ -378,12 +395,24 @@ export function TestQuiz({ token }: TestQuizProps) {
 
   const spacing = getSpacingClasses(screens?.game?.spacing);
 
+  function getEndScreenMessage(percentage: number): string {
+    if (endScreenCases.length > 0) {
+      const matchingCase = endScreenCases.find(
+        c => percentage >= c.min_percentage && percentage <= (c.max_percentage ?? 100)
+      );
+      if (matchingCase) return matchingCase.message;
+    }
+    const legacyMatch = config?.score_range_messages?.find(
+      m => percentage >= m.min && percentage <= m.max
+    );
+    if (legacyMatch) return legacyMatch.message;
+    return 'Great job!';
+  }
+
   function getShareText(): string {
     if (!session || !screens?.end?.social_share?.share_text_template) return '';
     const pct = Math.round((session.correct_answers / session.total_questions) * 100);
-    const scoreMessage = config?.score_range_messages?.find(
-      m => pct >= m.min && pct <= m.max
-    )?.message || '';
+    const scoreMessage = getEndScreenMessage(pct);
     return screens.end.social_share.share_text_template
       .replace(/{score}/g, String(session.correct_answers))
       .replace(/{total}/g, String(session.total_questions))
@@ -632,19 +661,12 @@ export function TestQuiz({ token }: TestQuizProps) {
               >
                 {Math.round((session.correct_answers / session.total_questions) * 100)}%
               </p>
-              {config?.score_range_messages && (
-                <p
-                  className="text-base sm:text-lg mb-6"
-                  style={{ color: theme?.secondary_text_color }}
-                >
-                  {config.score_range_messages.find(
-                    m => {
-                      const pct = Math.round((session.correct_answers / session.total_questions) * 100);
-                      return pct >= m.min && pct <= m.max;
-                    }
-                  )?.message || 'Great job!'}
-                </p>
-              )}
+              <p
+                className="text-base sm:text-lg mb-6"
+                style={{ color: theme?.secondary_text_color }}
+              >
+                {getEndScreenMessage(Math.round((session.correct_answers / session.total_questions) * 100))}
+              </p>
               {screens.end.show_score_breakdown && (
                 <div
                   className="p-3 sm:p-4 rounded-lg mb-4"
