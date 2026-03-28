@@ -72,6 +72,27 @@ html.game-active body {
   min-height: 0;
 }
 
+.game-content-centered {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.game-content-block {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  max-height: 100%;
+}
+
+.game-spacer {
+  flex-shrink: 1;
+  min-height: 8px;
+}
+
 @supports (padding-top: env(safe-area-inset-top)) {
   .game-stage {
     padding-top: env(safe-area-inset-top);

@@ -9,6 +9,14 @@ import {
   CompleteSessionResponse,
 } from '../types/trivia';
 
+type GameScreenSpacing = 'compact' | 'comfortable' | 'spacious';
+
+const SPACING_CONFIG: Record<GameScreenSpacing, { spacerHeight: number; answerGap: string }> = {
+  compact: { spacerHeight: 12, answerGap: 'space-y-1.5' },
+  comfortable: { spacerHeight: 24, answerGap: 'space-y-2 sm:space-y-3' },
+  spacious: { spacerHeight: 40, answerGap: 'space-y-4' },
+};
+
 type GameState = 'start' | 'playing' | 'answered' | 'completed';
 
 export function TriviaGame() {
@@ -272,54 +280,94 @@ export function TriviaGame() {
         <StageBody className="flex flex-col px-4 py-4">
           {currentQuestion && (
             <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-6 flex-1 flex flex-col min-h-0">
-              <h2 className="text-lg sm:text-xl font-bold text-gray-800 mb-4 flex-shrink-0 text-center">
-                {currentQuestion.question_text}
-              </h2>
-
               {gameState === 'playing' && (
-                <div className="flex-1 flex flex-col min-h-0">
-                  <div className="flex-1 overflow-y-auto space-y-2 sm:space-y-3 mb-4">
-                    {currentQuestion.answers.map((answer: any) => (
-                      <button
-                        key={answer.answer_id}
-                        onClick={() => setSelectedAnswer(answer.answer_id)}
-                        className={`w-full text-center p-3 sm:p-4 rounded-xl border-2 transition duration-200 text-sm sm:text-base ${
-                          selectedAnswer === answer.answer_id
-                            ? 'border-blue-600 bg-blue-50'
-                            : 'border-gray-200 hover:border-blue-300'
-                        }`}
-                      >
-                        {answer.answer_text}
-                      </button>
-                    ))}
+                <div className="flex-1 flex flex-col justify-center min-h-0">
+                  <div className="flex flex-col flex-shrink-0">
+                    <h2 className="text-lg sm:text-xl font-bold text-gray-800 text-center flex-shrink-0">
+                      {currentQuestion.question_text}
+                    </h2>
+
+                    <div
+                      className="flex-shrink"
+                      style={{
+                        height: SPACING_CONFIG.comfortable.spacerHeight,
+                        minHeight: 8,
+                      }}
+                    />
+
+                    <div className={`${SPACING_CONFIG.comfortable.answerGap} flex-shrink-0`}>
+                      {currentQuestion.answers.map((answer: any) => (
+                        <button
+                          key={answer.answer_id}
+                          onClick={() => setSelectedAnswer(answer.answer_id)}
+                          className={`w-full text-center p-3 sm:p-4 rounded-xl border-2 transition duration-200 text-sm sm:text-base ${
+                            selectedAnswer === answer.answer_id
+                              ? 'border-blue-600 bg-blue-50'
+                              : 'border-gray-200 hover:border-blue-300'
+                          }`}
+                        >
+                          {answer.answer_text}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div
+                      className="flex-shrink"
+                      style={{
+                        height: SPACING_CONFIG.comfortable.spacerHeight,
+                        minHeight: 8,
+                      }}
+                    />
+
+                    <button
+                      onClick={submitAnswer}
+                      disabled={!selectedAnswer || loading}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 sm:py-4 px-6 rounded-xl transition duration-200 disabled:opacity-50 flex-shrink-0 active:scale-95"
+                    >
+                      {loading ? 'Submitting...' : 'Submit Answer'}
+                    </button>
                   </div>
-                  <button
-                    onClick={submitAnswer}
-                    disabled={!selectedAnswer || loading}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 sm:py-4 px-6 rounded-xl transition duration-200 disabled:opacity-50 flex-shrink-0 active:scale-95"
-                  >
-                    {loading ? 'Submitting...' : 'Submit Answer'}
-                  </button>
                 </div>
               )}
 
               {gameState === 'answered' && feedback && (
-                <div className="flex-1 flex flex-col min-h-0">
-                  <div className="flex-1 overflow-y-auto mb-4">
+                <div className="flex-1 flex flex-col justify-center min-h-0">
+                  <div className="flex flex-col flex-shrink-0">
+                    <h2 className="text-lg sm:text-xl font-bold text-gray-800 text-center flex-shrink-0">
+                      {currentQuestion.question_text}
+                    </h2>
+
+                    <div
+                      className="flex-shrink"
+                      style={{
+                        height: SPACING_CONFIG.comfortable.spacerHeight,
+                        minHeight: 8,
+                      }}
+                    />
+
                     <div className={`p-4 rounded-xl ${feedback.correct ? 'bg-green-100' : 'bg-red-100'}`}>
                       <p className={`font-bold text-base sm:text-lg mb-2 ${feedback.correct ? 'text-green-800' : 'text-red-800'}`}>
                         {feedback.correct ? 'Correct!' : 'Incorrect'}
                       </p>
                       <p className="text-gray-700 text-sm sm:text-base">{feedback.explanation}</p>
                     </div>
+
+                    <div
+                      className="flex-shrink"
+                      style={{
+                        height: SPACING_CONFIG.comfortable.spacerHeight,
+                        minHeight: 8,
+                      }}
+                    />
+
+                    <button
+                      onClick={nextQuestion}
+                      disabled={loading}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 sm:py-4 px-6 rounded-xl transition duration-200 flex-shrink-0 active:scale-95"
+                    >
+                      {loading ? 'Loading...' : feedback?.is_last_question ? 'View Results' : 'Next Question'}
+                    </button>
                   </div>
-                  <button
-                    onClick={nextQuestion}
-                    disabled={loading}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 sm:py-4 px-6 rounded-xl transition duration-200 flex-shrink-0 active:scale-95"
-                  >
-                    {loading ? 'Loading...' : feedback?.is_last_question ? 'View Results' : 'Next Question'}
-                  </button>
                 </div>
               )}
 

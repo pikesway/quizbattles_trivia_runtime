@@ -382,18 +382,18 @@ export function TestQuiz({ token }: TestQuizProps) {
   const backgrounds = config?.backgrounds;
   const screens = config?.screens;
 
-  const getSpacingClasses = (spacing: GameScreenSpacing = 'comfortable') => {
+  const getSpacingConfig = (spacing: GameScreenSpacing = 'comfortable') => {
     switch (spacing) {
       case 'compact':
-        return { questionMb: 'mb-2', answerGap: 'space-y-1.5', answerPadding: 'p-2.5 sm:p-3' };
+        return { spacerHeight: 12, answerGap: 'space-y-1.5', answerPadding: 'p-2.5 sm:p-3' };
       case 'spacious':
-        return { questionMb: 'mb-6', answerGap: 'space-y-4', answerPadding: 'p-4 sm:p-5' };
+        return { spacerHeight: 40, answerGap: 'space-y-4', answerPadding: 'p-4 sm:p-5' };
       default:
-        return { questionMb: 'mb-4', answerGap: 'space-y-2 sm:space-y-3', answerPadding: 'p-3 sm:p-4' };
+        return { spacerHeight: 24, answerGap: 'space-y-2 sm:space-y-3', answerPadding: 'p-3 sm:p-4' };
     }
   };
 
-  const spacing = getSpacingClasses(screens?.game?.spacing);
+  const spacingConfig = getSpacingConfig(screens?.game?.spacing);
 
   function getEndScreenMessage(percentage: number): string {
     if (endScreenCases.length > 0) {
@@ -544,60 +544,70 @@ export function TestQuiz({ token }: TestQuizProps) {
                 )}
               </div>
 
-              <h2
-                className={`text-lg sm:text-xl font-medium ${spacing.questionMb} flex-shrink-0 text-center`}
-                style={{ color: theme?.primary_text_color }}
-              >
-                {session.question_set[session.current_index].question_text}
-              </h2>
+              <div className="flex-1 flex flex-col justify-center min-h-0">
+                <div className="flex flex-col flex-shrink-0">
+                  <h2
+                    className="text-lg sm:text-xl font-medium text-center flex-shrink-0"
+                    style={{ color: theme?.primary_text_color }}
+                  >
+                    {session.question_set[session.current_index].question_text}
+                  </h2>
 
-              <div className="flex-1 flex flex-col justify-center min-h-0 overflow-y-auto">
-                <div className={spacing.answerGap}>
-                  {session.question_set[session.current_index].answers.map(answer => {
-                    const isSelected = selectedAnswerId === answer.id;
-                    const showResult = selectedAnswerId !== null;
-                    const isCorrect = answer.is_correct;
+                  <div
+                    className="flex-shrink"
+                    style={{
+                      height: spacingConfig.spacerHeight,
+                      minHeight: 8,
+                    }}
+                  />
 
-                    let borderColor = 'rgba(255,255,255,0.2)';
-                    let bgColor = 'transparent';
+                  <div className={`${spacingConfig.answerGap} flex-shrink-0`}>
+                    {session.question_set[session.current_index].answers.map(answer => {
+                      const isSelected = selectedAnswerId === answer.id;
+                      const showResult = selectedAnswerId !== null;
+                      const isCorrect = answer.is_correct;
 
-                    if (showResult) {
-                      if (isCorrect) {
-                        borderColor = theme?.correct_feedback_accent || '#48BB78';
-                        bgColor = 'rgba(72, 187, 120, 0.2)';
-                      } else if (isSelected && !isCorrect) {
-                        borderColor = theme?.incorrect_feedback_accent || '#F56565';
-                        bgColor = 'rgba(245, 101, 101, 0.2)';
+                      let borderColor = 'rgba(255,255,255,0.2)';
+                      let bgColor = 'transparent';
+
+                      if (showResult) {
+                        if (isCorrect) {
+                          borderColor = theme?.correct_feedback_accent || '#48BB78';
+                          bgColor = 'rgba(72, 187, 120, 0.2)';
+                        } else if (isSelected && !isCorrect) {
+                          borderColor = theme?.incorrect_feedback_accent || '#F56565';
+                          bgColor = 'rgba(245, 101, 101, 0.2)';
+                        }
+                      } else if (isSelected) {
+                        borderColor = theme?.button_fill_color || '#3182CE';
+                        bgColor = 'rgba(255,255,255,0.1)';
                       }
-                    } else if (isSelected) {
-                      borderColor = theme?.button_fill_color || '#3182CE';
-                      bgColor = 'rgba(255,255,255,0.1)';
-                    }
 
-                    return (
-                      <button
-                        key={answer.id}
-                        onClick={() => handleAnswerSelect(answer.id)}
-                        disabled={selectedAnswerId !== null}
-                        className={`w-full ${spacing.answerPadding} rounded-lg text-center border-2 transition-all disabled:cursor-default text-sm sm:text-base`}
-                        style={{
-                          borderColor,
-                          backgroundColor: bgColor,
-                          color: theme?.primary_text_color,
-                        }}
-                      >
-                        <div className="flex items-center justify-center gap-2">
-                          <span>{answer.answer_text}</span>
-                          {showResult && isCorrect && (
-                            <CheckCircle className="w-5 h-5 flex-shrink-0" style={{ color: theme?.correct_feedback_accent }} />
-                          )}
-                          {showResult && isSelected && !isCorrect && (
-                            <XCircle className="w-5 h-5 flex-shrink-0" style={{ color: theme?.incorrect_feedback_accent }} />
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
+                      return (
+                        <button
+                          key={answer.id}
+                          onClick={() => handleAnswerSelect(answer.id)}
+                          disabled={selectedAnswerId !== null}
+                          className={`w-full ${spacingConfig.answerPadding} rounded-lg text-center border-2 transition-all disabled:cursor-default text-sm sm:text-base`}
+                          style={{
+                            borderColor,
+                            backgroundColor: bgColor,
+                            color: theme?.primary_text_color,
+                          }}
+                        >
+                          <div className="flex items-center justify-center gap-2">
+                            <span>{answer.answer_text}</span>
+                            {showResult && isCorrect && (
+                              <CheckCircle className="w-5 h-5 flex-shrink-0" style={{ color: theme?.correct_feedback_accent }} />
+                            )}
+                            {showResult && isSelected && !isCorrect && (
+                              <XCircle className="w-5 h-5 flex-shrink-0" style={{ color: theme?.incorrect_feedback_accent }} />
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
