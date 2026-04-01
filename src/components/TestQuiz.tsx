@@ -111,6 +111,7 @@ export function TestQuiz({ token }: TestQuizProps) {
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [timerActive, setTimerActive] = useState(false);
   const [endScreenCases, setEndScreenCases] = useState<EndScreenCase[]>([]);
+  const [showShareMenu, setShowShareMenu] = useState(false);
 
   const loadTestData = useCallback(async () => {
     try {
@@ -454,10 +455,46 @@ export function TestQuiz({ token }: TestQuizProps) {
       } catch {
       }
     } else {
-      const hashtags = (shareConfig.hashtags || []).join(',');
-      const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(url)}${hashtags ? `&hashtags=${encodeURIComponent(hashtags)}` : ''}`;
-      window.open(twitterUrl, '_blank', 'width=550,height=420');
+      setShowShareMenu(true);
     }
+  }
+
+  function handleShareTwitter() {
+    const shareConfig = screens?.end?.social_share;
+    if (!shareConfig) return;
+    const shareText = getShareText();
+    const url = shareConfig.fallback_url || window.location.href;
+    const hashtags = (shareConfig.hashtags || []).join(',');
+    const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(url)}${hashtags ? `&hashtags=${encodeURIComponent(hashtags)}` : ''}`;
+    window.open(twitterUrl, '_blank', 'width=550,height=420');
+    setShowShareMenu(false);
+  }
+
+  function handleShareFacebook() {
+    const shareConfig = screens?.end?.social_share;
+    if (!shareConfig) return;
+    const url = shareConfig.fallback_url || window.location.href;
+    const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
+    window.open(facebookUrl, '_blank', 'width=580,height=400');
+    setShowShareMenu(false);
+  }
+
+  async function handleCopyLink() {
+    const shareConfig = screens?.end?.social_share;
+    if (!shareConfig) return;
+    const shareText = getShareText();
+    const url = shareConfig.fallback_url || window.location.href;
+    try {
+      await navigator.clipboard.writeText(`${shareText} ${url}`);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = `${shareText} ${url}`;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    setShowShareMenu(false);
   }
 
   const getBackground = () => {
@@ -570,10 +607,9 @@ export function TestQuiz({ token }: TestQuizProps) {
                   </h2>
 
                   <div
-                    className="flex-shrink"
+                    className="game-spacer"
                     style={{
                       height: spacingConfig.spacerHeight,
-                      minHeight: 8,
                     }}
                   />
 
@@ -741,6 +777,61 @@ export function TestQuiz({ token }: TestQuizProps) {
 
         <StageFooter className="pb-4" />
       </div>
+
+      {showShareMenu && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setShowShareMenu(false)}
+        >
+          <div
+            className="w-full max-w-sm bg-white rounded-t-2xl p-4 pb-8"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4" />
+            <h3 className="text-base font-semibold text-gray-900 mb-4 text-center">Share Results</h3>
+            <div className="space-y-2">
+              <button
+                onClick={handleShareTwitter}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 transition-colors text-left"
+              >
+                <div className="w-10 h-10 rounded-full bg-black flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.74l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                  </svg>
+                </div>
+                <span className="text-sm font-medium text-gray-900">Share on X (Twitter)</span>
+              </button>
+              <button
+                onClick={handleShareFacebook}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 transition-colors text-left"
+              >
+                <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                  </svg>
+                </div>
+                <span className="text-sm font-medium text-gray-900">Share on Facebook</span>
+              </button>
+              <button
+                onClick={handleCopyLink}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 transition-colors text-left"
+              >
+                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                  <Share2 className="w-5 h-5 text-gray-600" />
+                </div>
+                <span className="text-sm font-medium text-gray-900">Copy to clipboard</span>
+              </button>
+            </div>
+            <button
+              onClick={() => setShowShareMenu(false)}
+              className="w-full mt-4 py-2 text-sm text-gray-500 hover:text-gray-700"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </GameStage>
   );
 }
