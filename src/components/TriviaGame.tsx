@@ -67,8 +67,8 @@ export function TriviaGame({ campaign_id, return_url }: TriviaGameProps) {
     try {
       const { data, error } = await supabase.functions.invoke('trivia-start', {
         body: {
-          campaign_id: campaign_id || 'demo-campaign',
-          campaign_game_instance_id: 'demo-instance',
+          campaign_id: campaign_id || 'standalone-play',
+          campaign_game_instance_id: 'standalone-instance',
         },
       });
 
