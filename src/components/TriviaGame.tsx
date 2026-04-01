@@ -42,7 +42,12 @@ const SPACING_CONFIG = getSpacingConfig('comfortable');
 
 type GameState = 'start' | 'playing' | 'answered' | 'completed';
 
-export function TriviaGame() {
+interface TriviaGameProps {
+  campaign_id?: string;
+  return_url?: string;
+}
+
+export function TriviaGame({ campaign_id, return_url }: TriviaGameProps) {
   const [gameState, setGameState] = useState<GameState>('start');
   const [sessionId, setSessionId] = useState<string>('');
   const [currentQuestion, setCurrentQuestion] = useState<any>(null);
@@ -62,7 +67,7 @@ export function TriviaGame() {
     try {
       const { data, error } = await supabase.functions.invoke('trivia-start', {
         body: {
-          campaign_id: 'demo-campaign',
+          campaign_id: campaign_id || 'demo-campaign',
           campaign_game_instance_id: 'demo-instance',
         },
       });
@@ -223,6 +228,12 @@ export function TriviaGame() {
     setShowShareMenu(false);
   }
 
+  function handleViewLeaderboard() {
+    if (return_url) {
+      window.location.href = return_url;
+    }
+  }
+
   const getBackgroundGradient = () => {
     if (gameState === 'start') return 'linear-gradient(to bottom right, #3B82F6, #2563EB)';
     if (gameState === 'completed') return 'linear-gradient(to bottom right, #10B981, #059669)';
@@ -279,7 +290,15 @@ export function TriviaGame() {
                 <p className="text-lg sm:text-xl text-gray-700">{completionData.message}</p>
               </div>
               <div className="space-y-3">
-                {completionData.cta?.enabled && (
+                {return_url && (
+                  <button
+                    onClick={handleViewLeaderboard}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 sm:py-4 px-6 rounded-xl transition duration-200 active:scale-95 shadow-lg"
+                  >
+                    View Live Leaderboard
+                  </button>
+                )}
+                {!return_url && completionData.cta?.enabled && (
                   <button
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 sm:py-4 px-6 rounded-xl transition duration-200 active:scale-95"
                   >

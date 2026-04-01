@@ -7,6 +7,22 @@ import { ProtectedRoute } from './components/admin/ProtectedRoute';
 
 type ViewType = 'player' | 'admin' | 'test';
 
+interface PlatformParams {
+  campaign_id?: string;
+  return_url?: string;
+}
+
+function getPlatformParams(): PlatformParams {
+  const searchParams = new URLSearchParams(window.location.search);
+  const campaign_id = searchParams.get('campaign_id') || undefined;
+  const return_url = searchParams.get('return_url') || undefined;
+
+  return {
+    campaign_id,
+    return_url: return_url ? decodeURIComponent(return_url) : undefined,
+  };
+}
+
 function getInitialView(): { view: ViewType; testToken?: string } {
   const path = window.location.pathname;
   if (path.startsWith('/admin')) return { view: 'admin' };
@@ -59,6 +75,8 @@ function App() {
     );
   }
 
+  const platformParams = getPlatformParams();
+
   return (
     <div>
       <div className="fixed top-4 right-4 z-50">
@@ -69,7 +87,10 @@ function App() {
           Admin
         </button>
       </div>
-      <TriviaGame />
+      <TriviaGame
+        campaign_id={platformParams.campaign_id}
+        return_url={platformParams.return_url}
+      />
     </div>
   );
 }
