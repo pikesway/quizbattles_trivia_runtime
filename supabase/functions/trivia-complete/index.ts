@@ -92,38 +92,59 @@ function resolveShareText(
     .replace(/\{quiz_name\}/g, quizName);
 }
 
-async function recordGamePlayOnPlatform(session: Record<string, unknown>): Promise<void> {
-  const platformUrl = Deno.env.get('PLATFORM_API_URL');
-  if (!platformUrl) {
-    console.log('Platform API URL not configured, skipping game play record');
+async function sendGameCompleteWebhook(session: Record<string, unknown>): Promise<void> {
+  const webhookUrl = Deno.env.get('PLATFORM_WEBHOOK_URL');
+  const webhookSecret = Deno.env.get('PLATFORM_WEBHOOK_SECRET');
+
+  if (!webhookUrl || !webhookSecret) {
+    console.log('Platform webhook not configured, skipping game complete notification');
     return;
   }
 
   try {
-    const completionTimeMs = session.completed_at
-      ? new Date(session.completed_at as string).getTime() - new Date(session.started_at as string).getTime()
+    const timeElapsedSeconds = session.completed_at && session.started_at
+      ? Math.round((new Date(session.completed_at as string).getTime() - new Date(session.started_at as string).getTime()) / 1000)
       : 0;
 
+    const metadata = (session.metadata as Record<string, unknown>) || {};
+    const leadId = metadata.platform_lead_id || session.lead_id || null;
+
     const payload = {
-      campaign_id: session.campaign_id,
-      campaign_game_instance_id: session.campaign_game_instance_id,
-      lead_id: session.lead_id,
-      score: session.score,
-      completion_time_ms: completionTimeMs,
-      session_id: session.id,
+      event: 'game_complete',
+      payload: {
+        campaign_id: session.campaign_id,
+        lead_id: leadId,
+        final_score: session.correct_answers || 0,
+        time_elapsed_seconds: timeElapsedSeconds,
+      },
     };
 
-    const response = await fetch(`${platformUrl}/api/game-play/record`, {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const response = await fetch(webhookUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${webhookSecret}`,
+      },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     });
 
+    clearTimeout(timeoutId);
+
     if (!response.ok) {
-      console.error('Failed to record game play on platform:', await response.text());
+      console.error('Platform webhook failed:', response.status, await response.text());
+    } else {
+      console.log('Game complete webhook sent successfully');
     }
   } catch (error) {
-    console.error('Error recording game play on platform:', error);
+    if ((error as Error).name === 'AbortError') {
+      console.error('Platform webhook timeout after 5 seconds');
+    } else {
+      console.error('Error calling platform webhook:', error);
+    }
   }
 }
 
@@ -240,7 +261,7 @@ Deno.serve(async (req: Request) => {
     session.status = 'completed';
     session.completed_at = new Date().toISOString();
 
-    EdgeRuntime.waitUntil(recordGamePlayOnPlatform(session));
+    EdgeRuntime.waitUntil(sendGameCompleteWebhook(session));
 
     return new Response(
       JSON.stringify({ success: true, data: responseData }),

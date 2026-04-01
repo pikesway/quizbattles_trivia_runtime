@@ -100,34 +100,58 @@ async function captureLeadOnPlatform(
   session: any,
   leadData: Record<string, string>
 ): Promise<string | null> {
-  const platformUrl = Deno.env.get('PLATFORM_API_URL');
-  if (!platformUrl) {
-    console.log('Platform API URL not configured, skipping lead capture');
+  const webhookUrl = Deno.env.get('PLATFORM_WEBHOOK_URL');
+  const webhookSecret = Deno.env.get('PLATFORM_WEBHOOK_SECRET');
+
+  if (!webhookUrl || !webhookSecret) {
+    console.log('Platform webhook not configured, skipping lead capture');
     return null;
   }
 
   try {
+    const nameParts = (leadData.name || '').trim().split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+
     const payload = {
-      campaign_id: session.campaign_id,
-      campaign_game_instance_id: session.campaign_game_instance_id,
-      ...leadData,
+      event: 'lead_capture',
+      payload: {
+        campaign_id: session.campaign_id,
+        first_name: firstName,
+        last_name: lastName,
+        email: leadData.email || '',
+        phone: leadData.phone || '',
+      },
     };
 
-    const response = await fetch(`${platformUrl}/api/leads/capture`, {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const response = await fetch(webhookUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${webhookSecret}`,
+      },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     });
 
+    clearTimeout(timeoutId);
+
     if (!response.ok) {
-      console.error('Failed to capture lead on platform:', await response.text());
+      console.error('Platform webhook failed:', response.status, await response.text());
       return null;
     }
 
     const result = await response.json();
     return result.lead_id || null;
   } catch (error) {
-    console.error('Error capturing lead on platform:', error);
+    if ((error as Error).name === 'AbortError') {
+      console.error('Platform webhook timeout after 5 seconds');
+    } else {
+      console.error('Error calling platform webhook:', error);
+    }
     return null;
   }
 }
@@ -228,9 +252,15 @@ Deno.serve(async (req: Request) => {
     const leadId = await captureLeadOnPlatform(session, data);
 
     if (leadId) {
+      const metadata = session.metadata || {};
+      metadata.platform_lead_id = leadId;
+
       const { error: updateError } = await supabase
         .from('trivia_game_sessions')
-        .update({ lead_id: leadId })
+        .update({
+          lead_id: leadId,
+          metadata: metadata
+        })
         .eq('id', session_id);
 
       if (updateError) {
