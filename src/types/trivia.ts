@@ -133,6 +133,11 @@ export interface StartSessionRequest {
 
 export interface StartSessionResponse {
   session_id: string;
+  shell?: {
+    internal_name: string;
+    topic: string;
+    config: any;
+  };
   question: {
     question_text: string;
     answers: Array<{

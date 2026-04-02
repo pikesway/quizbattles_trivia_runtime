@@ -229,6 +229,11 @@ Deno.serve(async (req: Request) => {
         success: true,
         data: {
           session_id: session.id,
+          shell: {
+            internal_name: shell.internal_name,
+            topic: shell.topic,
+            config: shell.config,
+          },
           question: {
             question_text: firstQuestion.question_text,
             answers: publicAnswers,

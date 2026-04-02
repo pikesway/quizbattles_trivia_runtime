@@ -48,9 +48,31 @@ interface TriviaGameProps {
   return_url?: string;
 }
 
-interface ShellMetadata {
+interface ShellData {
   internal_name: string;
   topic: string;
+  config: {
+    theme?: {
+      font_family?: string;
+      primary_text_color?: string;
+      secondary_text_color?: string;
+      button_fill_color?: string;
+      button_text_color?: string;
+      overlay_tint?: string;
+      correct_feedback_accent?: string;
+      incorrect_feedback_accent?: string;
+    };
+    backgrounds?: {
+      default?: string;
+      start?: string | null;
+      game?: string | null;
+      end?: string | null;
+    };
+    screens?: {
+      start?: { headline?: string; body?: string; button_label?: string };
+      game?: { show_progress_bar?: boolean; show_question_number?: boolean; spacing?: GameScreenSpacing; custom_spacing_value?: number };
+    };
+  };
 }
 
 export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameProps) {
@@ -66,31 +88,7 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
   const [currentQuestionNum, setCurrentQuestionNum] = useState(0);
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [validationError, setValidationError] = useState<string>('');
-  const [shellMetadata, setShellMetadata] = useState<ShellMetadata | null>(null);
-
-  useEffect(() => {
-    if (template_id) {
-      fetchShellMetadata();
-    }
-  }, [template_id]);
-
-  async function fetchShellMetadata() {
-    try {
-      const { data, error } = await supabase
-        .from('trivia_shells')
-        .select('internal_name, topic')
-        .eq('slug', template_id)
-        .maybeSingle();
-
-      if (error) throw error;
-
-      if (data) {
-        setShellMetadata(data);
-      }
-    } catch (err) {
-      console.error('Error fetching shell metadata:', err);
-    }
-  }
+  const [shellData, setShellData] = useState<ShellData | null>(null);
 
   async function startGame() {
     if (!template_id) {
@@ -121,6 +119,11 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
       setCurrentQuestion(response.question);
       setTotalQuestions(response.total_questions);
       setCurrentQuestionNum(response.current_question);
+
+      if (response.shell) {
+        setShellData(response.shell);
+      }
+
       setGameState('playing');
     } catch (err) {
       setError((err as Error).message);
@@ -291,19 +294,23 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
     }
   }
 
-  const getBackgroundGradient = () => {
-    if (gameState === 'start') return 'linear-gradient(to bottom right, #3B82F6, #2563EB)';
-    if (gameState === 'completed') return 'linear-gradient(to bottom right, #10B981, #059669)';
-    return 'linear-gradient(to bottom right, #3B82F6, #2563EB)';
+  const theme = shellData?.config?.theme;
+  const backgrounds = shellData?.config?.backgrounds;
+  const screens = shellData?.config?.screens;
+
+  const getBackground = () => {
+    if (gameState === 'start' && backgrounds?.start) return backgrounds.start;
+    if ((gameState === 'playing' || gameState === 'answered') && backgrounds?.game) return backgrounds.game;
+    if (gameState === 'completed' && backgrounds?.end) return backgrounds.end;
+    return backgrounds?.default || 'https://images.pexels.com/photos/1939485/pexels-photo-1939485.jpeg';
   };
+
+  const spacingConfig = getSpacingConfig(screens?.game?.spacing, screens?.game?.custom_spacing_value);
 
   if (validationError) {
     return (
-      <GameStage>
-        <div
-          className="flex flex-col h-full"
-          style={{ background: getBackgroundGradient() }}
-        >
+      <GameStage backgroundImage={getBackground()} overlayColor={theme?.overlay_tint || 'rgba(0,0,0,0.5)'}>
+        <div className="flex flex-col h-full" style={{ fontFamily: theme?.font_family || 'inherit' }}>
           <StageBody className="flex flex-col items-center justify-center px-6">
             <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-sm">
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-3 text-center">
@@ -321,28 +328,33 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
 
   if (gameState === 'start') {
     return (
-      <GameStage>
-        <div
-          className="flex flex-col h-full"
-          style={{ background: getBackgroundGradient() }}
-        >
-          <StageBody className="flex flex-col items-center justify-center px-6">
-            <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-sm">
-              <h1 className="text-3xl sm:text-4xl font-bold text-gray-800 mb-3 text-center">
-                {shellMetadata?.internal_name || 'Trivia Challenge'}
-              </h1>
-              <p className="text-gray-600 mb-6 text-center text-sm sm:text-base">
-                {shellMetadata?.topic || 'Test your knowledge across various topics!'}
-              </p>
-              <button
-                onClick={startGame}
-                disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 sm:py-4 px-6 rounded-xl transition duration-200 disabled:opacity-50 active:scale-95"
-              >
-                {loading ? 'Starting...' : 'Start Game'}
-              </button>
-              {error && <p className="mt-4 text-red-600 text-center text-sm">{error}</p>}
-            </div>
+      <GameStage backgroundImage={getBackground()} overlayColor={theme?.overlay_tint || 'rgba(0,0,0,0.5)'}>
+        <div className="flex flex-col h-full" style={{ fontFamily: theme?.font_family || 'inherit' }}>
+          <StageBody className="flex flex-col items-center justify-center px-6 text-center">
+            <h1
+              className="text-3xl sm:text-4xl font-bold mb-3"
+              style={{ color: theme?.primary_text_color || '#ffffff' }}
+            >
+              {screens?.start?.headline || shellData?.internal_name || 'Trivia Challenge'}
+            </h1>
+            <p
+              className="mb-6 text-base sm:text-lg max-w-md"
+              style={{ color: theme?.secondary_text_color || '#e5e7eb' }}
+            >
+              {screens?.start?.body || shellData?.topic || 'Test your knowledge across various topics!'}
+            </p>
+            <button
+              onClick={startGame}
+              disabled={loading}
+              className="px-8 py-3 sm:py-4 text-base font-bold rounded-xl transition-transform disabled:opacity-50 active:scale-95"
+              style={{
+                backgroundColor: theme?.button_fill_color || '#3b82f6',
+                color: theme?.button_text_color || '#ffffff',
+              }}
+            >
+              {loading ? 'Starting...' : (screens?.start?.button_label || 'Start Quiz')}
+            </button>
+            {error && <p className="mt-4 text-red-600 text-center text-sm bg-white px-4 py-2 rounded-lg">{error}</p>}
           </StageBody>
         </div>
       </GameStage>
@@ -351,55 +363,82 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
 
   if (gameState === 'completed' && completionData) {
     return (
-      <GameStage>
-        <div
-          className="flex flex-col h-full"
-          style={{ background: getBackgroundGradient() }}
-        >
-          <StageBody className="flex flex-col items-center justify-center px-6">
-            <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-sm text-center">
-              <h1 className="text-3xl sm:text-4xl font-bold text-gray-800 mb-4">Game Complete!</h1>
-              <div className="mb-4">
-                <p className="text-5xl sm:text-6xl font-bold text-green-600 mb-2">
-                  {completionData.score}/{completionData.total}
-                </p>
-                <p className="text-2xl font-bold text-green-500 mb-2">
-                  {completionData.percentage}%
-                </p>
-                <p className="text-lg sm:text-xl text-gray-700">{completionData.message}</p>
-              </div>
-              <div className="space-y-3">
-                {return_url && (
-                  <button
-                    onClick={handleViewLeaderboard}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 sm:py-4 px-6 rounded-xl transition duration-200 active:scale-95 shadow-lg"
-                  >
-                    View Live Leaderboard
-                  </button>
-                )}
-                {!return_url && completionData.cta?.enabled && (
-                  <button
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 sm:py-4 px-6 rounded-xl transition duration-200 active:scale-95"
-                  >
-                    {completionData.cta.label || 'Continue'}
-                  </button>
-                )}
-                {completionData.social_share?.enabled && (
-                  <button
-                    onClick={handleShare}
-                    className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 sm:py-4 px-6 rounded-xl transition duration-200 active:scale-95 flex items-center justify-center gap-2"
-                  >
-                    <Share2 className="w-5 h-5" />
-                    Share Results
-                  </button>
-                )}
+      <GameStage backgroundImage={getBackground()} overlayColor={theme?.overlay_tint || 'rgba(0,0,0,0.5)'}>
+        <div className="flex flex-col h-full" style={{ fontFamily: theme?.font_family || 'inherit' }}>
+          <StageBody className="flex flex-col items-center justify-center px-6 text-center">
+            <h1
+              className="text-3xl sm:text-4xl font-bold mb-4"
+              style={{ color: theme?.primary_text_color || '#ffffff' }}
+            >
+              Game Complete!
+            </h1>
+            <div className="mb-6">
+              <p
+                className="text-5xl sm:text-6xl font-bold mb-2"
+                style={{ color: theme?.correct_feedback_accent || '#10b981' }}
+              >
+                {completionData.score}/{completionData.total}
+              </p>
+              <p
+                className="text-2xl font-bold mb-2"
+                style={{ color: theme?.correct_feedback_accent || '#10b981' }}
+              >
+                {completionData.percentage}%
+              </p>
+              <p
+                className="text-lg sm:text-xl"
+                style={{ color: theme?.secondary_text_color || '#e5e7eb' }}
+              >
+                {completionData.message}
+              </p>
+            </div>
+            <div className="space-y-3 w-full max-w-sm">
+              {return_url && (
                 <button
-                  onClick={resetGame}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 sm:py-4 px-6 rounded-xl transition duration-200 active:scale-95"
+                  onClick={handleViewLeaderboard}
+                  className="w-full font-bold py-3 sm:py-4 px-6 rounded-xl transition-transform active:scale-95"
+                  style={{
+                    backgroundColor: theme?.button_fill_color || '#3b82f6',
+                    color: theme?.button_text_color || '#ffffff',
+                  }}
                 >
-                  Play Again
+                  View Live Leaderboard
                 </button>
-              </div>
+              )}
+              {!return_url && completionData.cta?.enabled && (
+                <button
+                  className="w-full font-bold py-3 sm:py-4 px-6 rounded-xl transition-transform active:scale-95"
+                  style={{
+                    backgroundColor: theme?.button_fill_color || '#3b82f6',
+                    color: theme?.button_text_color || '#ffffff',
+                  }}
+                >
+                  {completionData.cta.label || 'Continue'}
+                </button>
+              )}
+              {completionData.social_share?.enabled && (
+                <button
+                  onClick={handleShare}
+                  className="w-full font-bold py-3 sm:py-4 px-6 rounded-xl transition-transform active:scale-95 flex items-center justify-center gap-2"
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.2)',
+                    color: theme?.primary_text_color || '#ffffff',
+                  }}
+                >
+                  <Share2 className="w-5 h-5" />
+                  Share Results
+                </button>
+              )}
+              <button
+                onClick={resetGame}
+                className="w-full font-bold py-3 sm:py-4 px-6 rounded-xl transition-transform active:scale-95"
+                style={{
+                  backgroundColor: theme?.correct_feedback_accent || '#10b981',
+                  color: '#ffffff',
+                }}
+              >
+                Play Again
+              </button>
             </div>
           </StageBody>
         </div>
@@ -463,13 +502,13 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
   }
 
   return (
-    <GameStage>
-      <div
-        className="flex flex-col h-full"
-        style={{ background: getBackgroundGradient() }}
-      >
+    <GameStage backgroundImage={getBackground()} overlayColor={theme?.overlay_tint || 'rgba(0,0,0,0.5)'}>
+      <div className="flex flex-col h-full" style={{ fontFamily: theme?.font_family || 'inherit' }}>
         <StageHeader className="px-4 pt-4">
-          <div className="bg-white rounded-xl p-3 shadow-lg">
+          <div
+            className="rounded-xl p-3 backdrop-blur-sm"
+            style={{ backgroundColor: 'rgba(255,255,255,0.9)' }}
+          >
             <div className="flex justify-between items-center mb-2">
               <span className="text-xs sm:text-sm font-medium text-gray-600">
                 Question {currentQuestionNum} of {totalQuestions}
@@ -478,18 +517,26 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
                 <span className="text-xs sm:text-sm font-bold text-gray-800">Score: {feedback.score}</span>
               )}
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2">
-              <div
-                className="bg-blue-600 h-1.5 sm:h-2 rounded-full transition-all duration-300"
-                style={{ width: `${(currentQuestionNum / totalQuestions) * 100}%` }}
-              />
-            </div>
+            {screens?.game?.show_progress_bar !== false && (
+              <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2">
+                <div
+                  className="h-1.5 sm:h-2 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${(currentQuestionNum / totalQuestions) * 100}%`,
+                    backgroundColor: theme?.button_fill_color || '#3b82f6',
+                  }}
+                />
+              </div>
+            )}
           </div>
         </StageHeader>
 
         <StageBody className="flex flex-col px-4 py-4">
           {currentQuestion && (
-            <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-6 flex-1 flex flex-col min-h-0">
+            <div
+              className="rounded-2xl p-4 sm:p-6 flex-1 flex flex-col min-h-0 backdrop-blur-sm"
+              style={{ backgroundColor: 'rgba(255,255,255,0.95)' }}
+            >
               {gameState === 'playing' && (
                 <div className="flex-1 flex flex-col justify-center min-h-0">
                   <div className="flex flex-col flex-shrink-0">
@@ -500,20 +547,24 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
                     <div
                       className="game-spacer"
                       style={{
-                        height: SPACING_CONFIG.spacerHeight,
+                        height: spacingConfig.spacerHeight,
                       }}
                     />
 
-                    <div className={`${SPACING_CONFIG.answerGap} flex-shrink-0`}>
+                    <div className={`${spacingConfig.answerGap} flex-shrink-0`}>
                       {currentQuestion.answers.map((answer: any) => (
                         <button
                           key={answer.answer_id}
                           onClick={() => setSelectedAnswer(answer.answer_id)}
-                          className={`w-full text-center p-3 sm:p-4 rounded-xl border-2 transition duration-200 text-sm sm:text-base ${
-                            selectedAnswer === answer.answer_id
-                              ? 'border-blue-600 bg-blue-50'
-                              : 'border-gray-200 hover:border-blue-300'
-                          }`}
+                          className="w-full text-center p-3 sm:p-4 rounded-xl border-2 transition duration-200 text-sm sm:text-base"
+                          style={{
+                            borderColor: selectedAnswer === answer.answer_id
+                              ? (theme?.button_fill_color || '#3b82f6')
+                              : '#e5e7eb',
+                            backgroundColor: selectedAnswer === answer.answer_id
+                              ? 'rgba(59, 130, 246, 0.1)'
+                              : 'transparent',
+                          }}
                         >
                           {answer.answer_text}
                         </button>
@@ -523,14 +574,18 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
                     <div
                       className="game-spacer"
                       style={{
-                        height: SPACING_CONFIG.spacerHeight,
+                        height: spacingConfig.spacerHeight,
                       }}
                     />
 
                     <button
                       onClick={submitAnswer}
                       disabled={!selectedAnswer || loading}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 sm:py-4 px-6 rounded-xl transition duration-200 disabled:opacity-50 flex-shrink-0 active:scale-95"
+                      className="w-full font-bold py-3 sm:py-4 px-6 rounded-xl transition-transform disabled:opacity-50 flex-shrink-0 active:scale-95"
+                      style={{
+                        backgroundColor: theme?.button_fill_color || '#3b82f6',
+                        color: theme?.button_text_color || '#ffffff',
+                      }}
                     >
                       {loading ? 'Submitting...' : 'Submit Answer'}
                     </button>
@@ -548,12 +603,26 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
                     <div
                       className="game-spacer"
                       style={{
-                        height: SPACING_CONFIG.spacerHeight,
+                        height: spacingConfig.spacerHeight,
                       }}
                     />
 
-                    <div className={`p-4 rounded-xl ${feedback.correct ? 'bg-green-100' : 'bg-red-100'}`}>
-                      <p className={`font-bold text-base sm:text-lg mb-2 ${feedback.correct ? 'text-green-800' : 'text-red-800'}`}>
+                    <div
+                      className="p-4 rounded-xl"
+                      style={{
+                        backgroundColor: feedback.correct
+                          ? 'rgba(72, 187, 120, 0.15)'
+                          : 'rgba(245, 101, 101, 0.15)',
+                      }}
+                    >
+                      <p
+                        className="font-bold text-base sm:text-lg mb-2"
+                        style={{
+                          color: feedback.correct
+                            ? (theme?.correct_feedback_accent || '#16a34a')
+                            : (theme?.incorrect_feedback_accent || '#dc2626'),
+                        }}
+                      >
                         {feedback.correct ? 'Correct!' : 'Incorrect'}
                       </p>
                       <p className="text-gray-700 text-sm sm:text-base">{feedback.explanation}</p>
@@ -562,14 +631,18 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
                     <div
                       className="game-spacer"
                       style={{
-                        height: SPACING_CONFIG.spacerHeight,
+                        height: spacingConfig.spacerHeight,
                       }}
                     />
 
                     <button
                       onClick={nextQuestion}
                       disabled={loading}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 sm:py-4 px-6 rounded-xl transition duration-200 flex-shrink-0 active:scale-95"
+                      className="w-full font-bold py-3 sm:py-4 px-6 rounded-xl transition-transform flex-shrink-0 active:scale-95"
+                      style={{
+                        backgroundColor: theme?.button_fill_color || '#3b82f6',
+                        color: theme?.button_text_color || '#ffffff',
+                      }}
                     >
                       {loading ? 'Loading...' : feedback?.is_last_question ? 'View Results' : 'Next Question'}
                     </button>
@@ -577,7 +650,7 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
                 </div>
               )}
 
-              {error && <p className="mt-4 text-red-600 text-center text-sm">{error}</p>}
+              {error && <p className="mt-4 text-red-600 text-center text-sm bg-white px-4 py-2 rounded-lg">{error}</p>}
             </div>
           )}
         </StageBody>
