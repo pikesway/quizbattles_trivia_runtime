@@ -18,6 +18,7 @@ const SPACING_LIMITS = {
 
 interface LeadFormField {
   type: 'name' | 'email' | 'phone' | 'text';
+  name: string;
   label: string;
   placeholder: string;
   required: boolean;
@@ -401,32 +402,48 @@ export function ScreensEditor({
                         )}
                       </div>
                       {field.enabled && (
-                        <div className="grid grid-cols-2 gap-2 mt-2">
+                        <div className="space-y-2 mt-2">
                           <div>
-                            <label className="block text-xs text-gray-500 mb-1">Label</label>
+                            <label className="block text-xs text-gray-500 mb-1">Field Name</label>
                             <input
                               type="text"
-                              value={field.label}
+                              value={field.name}
                               onChange={e => {
                                 const fields = [...(config.lead?.fields || [])];
-                                fields[index] = { ...fields[index], label: e.target.value };
+                                fields[index] = { ...fields[index], name: e.target.value };
                                 onConfigChange('config.screens.lead.fields', fields);
                               }}
                               className="w-full px-2 py-1 text-sm border border-gray-200 rounded"
+                              placeholder="e.g., name, email, phone"
                             />
                           </div>
-                          <div>
-                            <label className="block text-xs text-gray-500 mb-1">Placeholder</label>
-                            <input
-                              type="text"
-                              value={field.placeholder}
-                              onChange={e => {
-                                const fields = [...(config.lead?.fields || [])];
-                                fields[index] = { ...fields[index], placeholder: e.target.value };
-                                onConfigChange('config.screens.lead.fields', fields);
-                              }}
-                              className="w-full px-2 py-1 text-sm border border-gray-200 rounded"
-                            />
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">Label</label>
+                              <input
+                                type="text"
+                                value={field.label}
+                                onChange={e => {
+                                  const fields = [...(config.lead?.fields || [])];
+                                  fields[index] = { ...fields[index], label: e.target.value };
+                                  onConfigChange('config.screens.lead.fields', fields);
+                                }}
+                                className="w-full px-2 py-1 text-sm border border-gray-200 rounded"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">Placeholder</label>
+                              <input
+                                type="text"
+                                value={field.placeholder}
+                                onChange={e => {
+                                  const fields = [...(config.lead?.fields || [])];
+                                  fields[index] = { ...fields[index], placeholder: e.target.value };
+                                  onConfigChange('config.screens.lead.fields', fields);
+                                }}
+                                className="w-full px-2 py-1 text-sm border border-gray-200 rounded"
+                              />
+                            </div>
                           </div>
                         </div>
                       )}

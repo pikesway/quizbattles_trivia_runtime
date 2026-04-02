@@ -33,6 +33,7 @@ type LeadFormFieldType = 'name' | 'email' | 'phone' | 'text';
 
 interface LeadFormField {
   type: LeadFormFieldType;
+  name: string;
   label: string;
   placeholder: string;
   required: boolean;
@@ -306,9 +307,9 @@ export function ShellEditor({ shell, onBack, onSave }: ShellEditorProps) {
             lead: {
               headline: 'Complete Your Entry',
               fields: [
-                { type: 'name', label: 'Name', placeholder: 'Enter your name', required: true, enabled: true },
-                { type: 'email', label: 'Email', placeholder: 'Enter your email', required: true, enabled: true },
-                { type: 'phone', label: 'Phone', placeholder: '10 digit phone number', required: false, enabled: false },
+                { type: 'name', name: 'name', label: 'Name', placeholder: 'Enter your name', required: true, enabled: true },
+                { type: 'email', name: 'email', label: 'Email', placeholder: 'Enter your email', required: true, enabled: true },
+                { type: 'phone', name: 'phone', label: 'Phone', placeholder: '10 digit phone number', required: false, enabled: false },
               ],
               terms: {
                 enabled: true,

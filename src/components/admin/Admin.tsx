@@ -11,6 +11,7 @@ type Page = 'shells' | 'questions' | 'reviews' | 'imports' | 'users';
 
 interface LeadFormField {
   type: 'name' | 'email' | 'phone' | 'text';
+  name: string;
   label: string;
   placeholder: string;
   required: boolean;
