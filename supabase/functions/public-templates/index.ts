@@ -7,11 +7,8 @@ const corsHeaders = {
 
 interface TemplateResponse {
   id: string;
-  display_name: string;
-  slug: string;
+  name: string;
   status: string;
-  topic: string;
-  tags: string[];
 }
 
 Deno.serve(async (req: Request) => {
@@ -25,8 +22,8 @@ Deno.serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { data: shells, error } = await supabase
-      .from('shells')
-      .select('id, internal_name, slug, status, topic, tags')
+      .from('trivia_shells')
+      .select('id, internal_name, status')
       .or('status.eq.active,status.eq.ready')
       .order('internal_name');
 
@@ -36,11 +33,8 @@ Deno.serve(async (req: Request) => {
 
     const templates: TemplateResponse[] = (shells || []).map((shell) => ({
       id: shell.id,
-      display_name: shell.internal_name,
-      slug: shell.slug,
+      name: shell.internal_name,
       status: shell.status,
-      topic: shell.topic,
-      tags: shell.tags || [],
     }));
 
     return new Response(
@@ -51,12 +45,23 @@ Deno.serve(async (req: Request) => {
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorDetails = (error as any)?.details || null;
+    const errorHint = (error as any)?.hint || null;
+    const errorCode = (error as any)?.code || null;
+
     return new Response(
       JSON.stringify({
         success: false,
         error: {
           code: 'FETCH_TEMPLATES_FAILED',
-          message: 'Failed to retrieve available templates'
+          message: 'Failed to retrieve available templates',
+          debug: {
+            message: errorMessage,
+            details: errorDetails,
+            hint: errorHint,
+            code: errorCode,
+          },
         },
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
