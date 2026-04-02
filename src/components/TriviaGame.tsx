@@ -44,10 +44,11 @@ type GameState = 'start' | 'playing' | 'answered' | 'completed';
 
 interface TriviaGameProps {
   campaign_id?: string;
+  template_id?: string;
   return_url?: string;
 }
 
-export function TriviaGame({ campaign_id, return_url }: TriviaGameProps) {
+export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameProps) {
   const [gameState, setGameState] = useState<GameState>('start');
   const [sessionId, setSessionId] = useState<string>('');
   const [currentQuestion, setCurrentQuestion] = useState<any>(null);
@@ -59,14 +60,20 @@ export function TriviaGame({ campaign_id, return_url }: TriviaGameProps) {
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [currentQuestionNum, setCurrentQuestionNum] = useState(0);
   const [showShareMenu, setShowShareMenu] = useState(false);
+  const [validationError, setValidationError] = useState<string>('');
 
   async function startGame() {
+    if (!template_id) {
+      setValidationError('Invalid or missing game link.');
+      return;
+    }
     setLoading(true);
     setError('');
 
     try {
       const { data, error } = await supabase.functions.invoke('trivia-start', {
         body: {
+          template_id,
           campaign_id: campaign_id || 'standalone-play',
           campaign_game_instance_id: 'standalone-instance',
         },
@@ -239,6 +246,28 @@ export function TriviaGame({ campaign_id, return_url }: TriviaGameProps) {
     if (gameState === 'completed') return 'linear-gradient(to bottom right, #10B981, #059669)';
     return 'linear-gradient(to bottom right, #3B82F6, #2563EB)';
   };
+
+  if (validationError) {
+    return (
+      <GameStage>
+        <div
+          className="flex flex-col h-full"
+          style={{ background: getBackgroundGradient() }}
+        >
+          <StageBody className="flex flex-col items-center justify-center px-6">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-sm">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-3 text-center">
+                Invalid Game Link
+              </h1>
+              <p className="text-gray-600 text-center text-sm sm:text-base">
+                {validationError}
+              </p>
+            </div>
+          </StageBody>
+        </div>
+      </GameStage>
+    );
+  }
 
   if (gameState === 'start') {
     return (

@@ -100,9 +100,9 @@ Deno.serve(async (req: Request) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { campaign_id, campaign_game_instance_id, lead_id } = await req.json();
+    const { template_id, campaign_id, campaign_game_instance_id, lead_id } = await req.json();
 
-    if (!campaign_id || !campaign_game_instance_id) {
+    if (!template_id || !campaign_id || !campaign_game_instance_id) {
       return new Response(
         JSON.stringify({
           success: false,
@@ -112,27 +112,93 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const config = getDefaultConfig();
+    const { data: shell, error: shellError } = await supabase
+      .from('trivia_shells')
+      .select('*')
+      .eq('slug', template_id)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    if (shellError) throw shellError;
+
+    if (!shell) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: { code: 'SHELL_NOT_FOUND', message: 'Game template not found or inactive' },
+        }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const config: GameConfig = {
+      question_mode: shell.default_selection_mode || 'random',
+      question_count: shell.default_question_count || 10,
+      timer: {
+        mode: shell.default_timer_mode || 'per_question',
+        seconds: shell.default_timer_seconds || 15,
+      },
+      ui: {
+        background_url: shell.config?.backgrounds?.default || shell.config?.backgrounds?.game || 'https://images.pexels.com/photos/1939485/pexels-photo-1939485.jpeg',
+      },
+      lead_capture: shell.config?.lead_capture || getDefaultConfig().lead_capture,
+      end_screen_rules: shell.config?.score_range_messages || getDefaultConfig().end_screen_rules,
+    };
 
     let questions;
     if (config.question_mode === 'fixed') {
+      const { data: links, error: linksError } = await supabase
+        .from('trivia_shell_question_links')
+        .select('question_id')
+        .eq('shell_id', shell.id)
+        .order('position', { ascending: true })
+        .limit(config.question_count);
+
+      if (linksError) throw linksError;
+
+      const questionIds = (links || []).map((link) => link.question_id);
+
+      if (questionIds.length === 0) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: { code: 'NO_QUESTIONS', message: 'No questions configured for this game' },
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       const { data, error } = await supabase
         .from('trivia_questions')
         .select('*')
+        .in('id', questionIds)
         .eq('is_active', true)
-        .order('created_at', { ascending: true })
-        .limit(config.question_count);
+        .eq('review_state', 'approved');
 
       if (error) throw error;
-      questions = data || [];
+
+      const questionsMap = new Map((data || []).map((q) => [q.id, q]));
+      questions = questionIds.map((id) => questionsMap.get(id)).filter(Boolean);
     } else {
       const { data, error } = await supabase
         .from('trivia_questions')
         .select('*')
         .eq('is_active', true)
-        .limit(config.question_count * 2);
+        .eq('review_state', 'approved')
+        .limit(config.question_count * 3);
 
       if (error) throw error;
+
+      if (!data || data.length === 0) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: { code: 'NO_QUESTIONS', message: 'No approved questions available' },
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       questions = shuffleArray(data || []).slice(0, config.question_count);
     }
 
@@ -166,6 +232,7 @@ Deno.serve(async (req: Request) => {
     const { data: session, error: sessionError } = await supabase
       .from('trivia_game_sessions')
       .insert({
+        shell_id: shell.id,
         campaign_id,
         campaign_game_instance_id,
         lead_id: lead_id || null,

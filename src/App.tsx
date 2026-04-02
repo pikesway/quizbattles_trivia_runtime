@@ -9,16 +9,19 @@ type ViewType = 'player' | 'admin' | 'test';
 
 interface PlatformParams {
   campaign_id?: string;
+  template_id?: string;
   return_url?: string;
 }
 
 function getPlatformParams(): PlatformParams {
   const searchParams = new URLSearchParams(window.location.search);
   const campaign_id = searchParams.get('campaign_id') || undefined;
+  const template_id = searchParams.get('template_id') || undefined;
   const return_url = searchParams.get('return_url') || undefined;
 
   return {
     campaign_id,
+    template_id,
     return_url: return_url ? decodeURIComponent(return_url) : undefined,
   };
 }
@@ -89,6 +92,7 @@ function App() {
       </div>
       <TriviaGame
         campaign_id={platformParams.campaign_id}
+        template_id={platformParams.template_id}
         return_url={platformParams.return_url}
       />
     </div>
