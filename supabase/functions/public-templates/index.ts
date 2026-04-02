@@ -25,10 +25,10 @@ Deno.serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { data: shells, error } = await supabase
-      .from('trivia_shells')
+      .from('shells')
       .select('id, internal_name, slug, status, topic, tags')
-      .in('status', ['active', 'ready'])
-      .order('internal_name', { ascending: true });
+      .or('status.eq.active,status.eq.ready')
+      .order('internal_name');
 
     if (error) {
       throw error;
