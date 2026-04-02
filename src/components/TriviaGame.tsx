@@ -535,19 +535,11 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
   const screens = shellData?.config?.screens;
 
   const getBackground = () => {
-    if (gameState === 'start') {
-      return backgrounds?.start || shellData?.theme?.background_url || backgrounds?.default || 'https://images.pexels.com/photos/1939485/pexels-photo-1939485.jpeg';
-    }
-    if (gameState === 'playing' || gameState === 'answered') {
-      return backgrounds?.game || shellData?.theme?.background_url || backgrounds?.default || 'https://images.pexels.com/photos/1939485/pexels-photo-1939485.jpeg';
-    }
-    if (gameState === 'lead_form') {
-      return backgrounds?.lead || shellData?.theme?.background_url || backgrounds?.default || 'https://images.pexels.com/photos/1939485/pexels-photo-1939485.jpeg';
-    }
-    if (gameState === 'completed') {
-      return backgrounds?.end || shellData?.theme?.background_url || backgrounds?.default || 'https://images.pexels.com/photos/1939485/pexels-photo-1939485.jpeg';
-    }
-    return shellData?.theme?.background_url || backgrounds?.default || 'https://images.pexels.com/photos/1939485/pexels-photo-1939485.jpeg';
+    if (gameState === 'start' && backgrounds?.start) return backgrounds.start;
+    if ((gameState === 'playing' || gameState === 'answered') && backgrounds?.game) return backgrounds.game;
+    if (gameState === 'lead_form' && backgrounds?.lead) return backgrounds.lead;
+    if (gameState === 'completed' && backgrounds?.end) return backgrounds.end;
+    return backgrounds?.default || 'https://images.pexels.com/photos/1939485/pexels-photo-1939485.jpeg';
   };
 
   const spacingConfig = getSpacingConfig(screens?.game?.spacing, screens?.game?.custom_spacing_value);
