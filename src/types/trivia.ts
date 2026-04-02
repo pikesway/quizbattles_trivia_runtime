@@ -18,7 +18,7 @@ export interface TriviaAnswer {
 }
 
 export type SessionStatus = 'in_progress' | 'completed' | 'abandoned';
-export type TimerMode = 'per_question' | 'per_quiz';
+export type TimerMode = 'per_question' | 'per_quiz' | 'none';
 
 export interface TriviaGameSession {
   id: string;

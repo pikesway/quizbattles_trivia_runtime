@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Share2 } from 'lucide-react';
+import { Share2, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { GameStage, StageHeader, StageBody, StageFooter } from './runtime/GameStage';
 import {
@@ -7,6 +7,7 @@ import {
   NextQuestionResponse,
   SubmitAnswerResponse,
   CompleteSessionResponse,
+  TimerMode,
 } from '../types/trivia';
 
 type GameScreenSpacingPreset = 'compact' | 'comfortable' | 'spacious';
@@ -22,19 +23,19 @@ function getSpacingConfig(spacing: GameScreenSpacing = 'comfortable', customValu
   if (spacing === 'custom' && customValue !== undefined) {
     const height = Math.max(8, Math.min(60, customValue));
     if (height <= 16) {
-      return { spacerHeight: height, answerGap: 'space-y-1.5' };
+      return { spacerHeight: height, answerGap: 'space-y-1.5', answerPadding: 'p-2.5 sm:p-3' };
     } else if (height >= 32) {
-      return { spacerHeight: height, answerGap: 'space-y-4' };
+      return { spacerHeight: height, answerGap: 'space-y-4', answerPadding: 'p-4 sm:p-5' };
     }
-    return { spacerHeight: height, answerGap: 'space-y-2 sm:space-y-3' };
+    return { spacerHeight: height, answerGap: 'space-y-2 sm:space-y-3', answerPadding: 'p-3 sm:p-4' };
   }
   switch (spacing) {
     case 'compact':
-      return { spacerHeight: SPACING_PRESETS.compact, answerGap: 'space-y-1.5' };
+      return { spacerHeight: SPACING_PRESETS.compact, answerGap: 'space-y-1.5', answerPadding: 'p-2.5 sm:p-3' };
     case 'spacious':
-      return { spacerHeight: SPACING_PRESETS.spacious, answerGap: 'space-y-4' };
+      return { spacerHeight: SPACING_PRESETS.spacious, answerGap: 'space-y-4', answerPadding: 'p-4 sm:p-5' };
     default:
-      return { spacerHeight: SPACING_PRESETS.comfortable, answerGap: 'space-y-2 sm:space-y-3' };
+      return { spacerHeight: SPACING_PRESETS.comfortable, answerGap: 'space-y-2 sm:space-y-3', answerPadding: 'p-3 sm:p-4' };
   }
 }
 
@@ -71,6 +72,19 @@ interface ShellData {
     screens?: {
       start?: { headline?: string; body?: string; button_label?: string };
       game?: { show_progress_bar?: boolean; show_question_number?: boolean; spacing?: GameScreenSpacing; custom_spacing_value?: number };
+      feedback?: { correct_headline?: string; incorrect_headline?: string; show_explanation?: boolean };
+      end?: {
+        headline_template?: string;
+        show_score_breakdown?: boolean;
+        cta?: { enabled: boolean; label: string };
+        social_share?: {
+          enabled: boolean;
+          share_text_template: string;
+          share_image_url: string;
+          hashtags: string[];
+          fallback_url: string;
+        };
+      };
     };
   };
 }
@@ -89,6 +103,28 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [validationError, setValidationError] = useState<string>('');
   const [shellData, setShellData] = useState<ShellData | null>(null);
+  const [timerMode, setTimerMode] = useState<TimerMode>('per_question');
+  const [timerSeconds, setTimerSeconds] = useState<number>(15);
+  const [timeRemaining, setTimeRemaining] = useState<number>(0);
+  const [timerActive, setTimerActive] = useState(false);
+  const [lastAnswerCorrect, setLastAnswerCorrect] = useState<boolean | null>(null);
+
+  // Timer countdown effect
+  useEffect(() => {
+    if (!timerActive || timeRemaining <= 0 || timerMode === 'none') return;
+
+    const interval = setInterval(() => {
+      setTimeRemaining(prev => {
+        if (prev <= 1) {
+          handleTimeUp();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [timerActive, timeRemaining, timerMode]);
 
   async function startGame() {
     if (!template_id) {
@@ -124,6 +160,14 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
         setShellData(response.shell);
       }
 
+      // Set timer configuration
+      if (response.timer) {
+        setTimerMode(response.timer.mode);
+        setTimerSeconds(response.timer.seconds);
+        setTimeRemaining(response.timer.seconds);
+        setTimerActive(response.timer.mode !== 'none');
+      }
+
       setGameState('playing');
     } catch (err) {
       setError((err as Error).message);
@@ -132,8 +176,11 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
     }
   }
 
-  async function submitAnswer() {
-    if (!selectedAnswer) return;
+  async function handleAnswerSelect(answerId: string) {
+    if (selectedAnswer) return; // Prevent multiple selections
+
+    setSelectedAnswer(answerId);
+    setTimerActive(false);
 
     setLoading(true);
     setError('');
@@ -142,7 +189,8 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
       const { data, error } = await supabase.functions.invoke('trivia-answer', {
         body: {
           session_id: sessionId,
-          selected_answer_id: selectedAnswer,
+          selected_answer_id: answerId,
+          time_to_answer_ms: timerMode !== 'none' ? (timerSeconds - timeRemaining) * 1000 : undefined,
         },
       });
 
@@ -155,7 +203,15 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
 
       const response = data.data as SubmitAnswerResponse;
       setFeedback(response);
-      setGameState('answered');
+      setLastAnswerCorrect(response.correct);
+
+      // Check if we should show feedback screen or auto-advance
+      if (shellData?.config?.screens?.feedback?.show_explanation && response.explanation) {
+        setGameState('answered');
+      } else {
+        // Auto-advance after brief delay
+        setTimeout(() => moveToNext(), 500);
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -163,7 +219,22 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
     }
   }
 
-  async function nextQuestion() {
+  function handleTimeUp() {
+    if (selectedAnswer) return; // Already answered
+
+    setTimerActive(false);
+    setLastAnswerCorrect(false);
+
+    // Submit with no answer selected (will be marked incorrect)
+    // For now, just move to next or show feedback
+    if (shellData?.config?.screens?.feedback?.show_explanation) {
+      setGameState('answered');
+    } else {
+      moveToNext();
+    }
+  }
+
+  async function moveToNext() {
     if (feedback?.is_last_question) {
       await completeGame();
       return;
@@ -189,6 +260,9 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
       setCurrentQuestionNum(response.current_question);
       setSelectedAnswer('');
       setFeedback(null);
+      setLastAnswerCorrect(null);
+      setTimeRemaining(timerSeconds);
+      setTimerActive(timerMode !== 'none');
       setGameState('playing');
     } catch (err) {
       setError((err as Error).message);
@@ -503,156 +577,150 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
 
   return (
     <GameStage backgroundImage={getBackground()} overlayColor={theme?.overlay_tint || 'rgba(0,0,0,0.5)'}>
-      <div className="flex flex-col h-full" style={{ fontFamily: theme?.font_family || 'inherit' }}>
-        <StageHeader className="px-4 pt-4">
-          <div
-            className="rounded-xl p-3 backdrop-blur-sm"
-            style={{ backgroundColor: 'rgba(255,255,255,0.9)' }}
-          >
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-xs sm:text-sm font-medium text-gray-600">
-                Question {currentQuestionNum} of {totalQuestions}
-              </span>
-              {feedback && (
-                <span className="text-xs sm:text-sm font-bold text-gray-800">Score: {feedback.score}</span>
-              )}
-            </div>
-            {screens?.game?.show_progress_bar !== false && (
-              <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2">
+      <div className="flex flex-col h-full" style={{ fontFamily: theme?.font_family || 'Inter' }}>
+        <StageHeader className="px-4 pt-3 pb-2" />
+
+        <StageBody className="flex flex-col px-4">
+          {gameState === 'playing' && currentQuestion && (
+            <div className="flex-1 flex flex-col min-h-0">
+              <div className="flex-shrink-0 mb-3">
                 <div
-                  className="h-1.5 sm:h-2 rounded-full transition-all duration-300"
-                  style={{
-                    width: `${(currentQuestionNum / totalQuestions) * 100}%`,
-                    backgroundColor: theme?.button_fill_color || '#3b82f6',
-                  }}
-                />
-              </div>
-            )}
-          </div>
-        </StageHeader>
-
-        <StageBody className="flex flex-col px-4 py-4">
-          {currentQuestion && (
-            <div
-              className="rounded-2xl p-4 sm:p-6 flex-1 flex flex-col min-h-0 backdrop-blur-sm"
-              style={{ backgroundColor: 'rgba(255,255,255,0.95)' }}
-            >
-              {gameState === 'playing' && (
-                <div className="flex-1 flex flex-col justify-center min-h-0">
-                  <div className="flex flex-col flex-shrink-0">
-                    <h2 className="text-lg sm:text-xl font-bold text-gray-800 text-center flex-shrink-0">
-                      {currentQuestion.question_text}
-                    </h2>
-
+                  className="flex justify-between text-xs sm:text-sm mb-2"
+                  style={{ color: theme?.secondary_text_color }}
+                >
+                  <span>Question {currentQuestionNum} of {totalQuestions}</span>
+                  {timerMode !== 'none' && (
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-4 h-4" />
+                      {timeRemaining}s
+                    </span>
+                  )}
+                </div>
+                {screens?.game?.show_progress_bar !== false && (
+                  <div className="w-full bg-gray-600 rounded-full h-1.5">
                     <div
-                      className="game-spacer"
+                      className="h-1.5 rounded-full transition-all"
                       style={{
-                        height: spacingConfig.spacerHeight,
+                        width: `${(currentQuestionNum / totalQuestions) * 100}%`,
+                        backgroundColor: theme?.button_fill_color,
                       }}
                     />
+                  </div>
+                )}
+              </div>
 
-                    <div className={`${spacingConfig.answerGap} flex-shrink-0`}>
-                      {currentQuestion.answers.map((answer: any) => (
+              <div className="flex-1 flex flex-col justify-center min-h-0">
+                <div className="flex flex-col flex-shrink-0">
+                  <h2
+                    className="text-lg sm:text-xl font-medium text-center flex-shrink-0"
+                    style={{ color: theme?.primary_text_color }}
+                  >
+                    {currentQuestion.question_text}
+                  </h2>
+
+                  <div
+                    className="game-spacer"
+                    style={{
+                      height: spacingConfig.spacerHeight,
+                    }}
+                  />
+
+                  <div className={`${spacingConfig.answerGap} flex-shrink-0`}>
+                    {currentQuestion.answers.map((answer: any) => {
+                      const isSelected = selectedAnswer === answer.answer_id;
+                      const showResult = selectedAnswer !== null && feedback;
+                      const isCorrect = showResult && answer.answer_id === feedback.correct_answer_id;
+
+                      let borderColor = 'rgba(255,255,255,0.2)';
+                      let bgColor = 'transparent';
+
+                      if (showResult) {
+                        if (isCorrect) {
+                          borderColor = theme?.correct_feedback_accent || '#48BB78';
+                          bgColor = 'rgba(72, 187, 120, 0.2)';
+                        } else if (isSelected && !isCorrect) {
+                          borderColor = theme?.incorrect_feedback_accent || '#F56565';
+                          bgColor = 'rgba(245, 101, 101, 0.2)';
+                        }
+                      } else if (isSelected) {
+                        borderColor = theme?.button_fill_color || '#3182CE';
+                        bgColor = 'rgba(255,255,255,0.1)';
+                      }
+
+                      return (
                         <button
                           key={answer.answer_id}
-                          onClick={() => setSelectedAnswer(answer.answer_id)}
-                          className="w-full text-center p-3 sm:p-4 rounded-xl border-2 transition duration-200 text-sm sm:text-base"
+                          onClick={() => handleAnswerSelect(answer.answer_id)}
+                          disabled={selectedAnswer !== null}
+                          className={`w-full ${spacingConfig.answerPadding} rounded-lg text-center border-2 transition-all disabled:cursor-default text-sm sm:text-base`}
                           style={{
-                            borderColor: selectedAnswer === answer.answer_id
-                              ? (theme?.button_fill_color || '#3b82f6')
-                              : '#e5e7eb',
-                            backgroundColor: selectedAnswer === answer.answer_id
-                              ? 'rgba(59, 130, 246, 0.1)'
-                              : 'transparent',
+                            borderColor,
+                            backgroundColor: bgColor,
+                            color: theme?.primary_text_color,
                           }}
                         >
-                          {answer.answer_text}
+                          <div className="flex items-center justify-center gap-2">
+                            <span>{answer.answer_text}</span>
+                            {showResult && isCorrect && (
+                              <CheckCircle className="w-5 h-5 flex-shrink-0" style={{ color: theme?.correct_feedback_accent }} />
+                            )}
+                            {showResult && isSelected && !isCorrect && (
+                              <XCircle className="w-5 h-5 flex-shrink-0" style={{ color: theme?.incorrect_feedback_accent }} />
+                            )}
+                          </div>
                         </button>
-                      ))}
-                    </div>
-
-                    <div
-                      className="game-spacer"
-                      style={{
-                        height: spacingConfig.spacerHeight,
-                      }}
-                    />
-
-                    <button
-                      onClick={submitAnswer}
-                      disabled={!selectedAnswer || loading}
-                      className="w-full font-bold py-3 sm:py-4 px-6 rounded-xl transition-transform disabled:opacity-50 flex-shrink-0 active:scale-95"
-                      style={{
-                        backgroundColor: theme?.button_fill_color || '#3b82f6',
-                        color: theme?.button_text_color || '#ffffff',
-                      }}
-                    >
-                      {loading ? 'Submitting...' : 'Submit Answer'}
-                    </button>
+                      );
+                    })}
                   </div>
                 </div>
-              )}
-
-              {gameState === 'answered' && feedback && (
-                <div className="flex-1 flex flex-col justify-center min-h-0">
-                  <div className="flex flex-col flex-shrink-0">
-                    <h2 className="text-lg sm:text-xl font-bold text-gray-800 text-center flex-shrink-0">
-                      {currentQuestion.question_text}
-                    </h2>
-
-                    <div
-                      className="game-spacer"
-                      style={{
-                        height: spacingConfig.spacerHeight,
-                      }}
-                    />
-
-                    <div
-                      className="p-4 rounded-xl"
-                      style={{
-                        backgroundColor: feedback.correct
-                          ? 'rgba(72, 187, 120, 0.15)'
-                          : 'rgba(245, 101, 101, 0.15)',
-                      }}
-                    >
-                      <p
-                        className="font-bold text-base sm:text-lg mb-2"
-                        style={{
-                          color: feedback.correct
-                            ? (theme?.correct_feedback_accent || '#16a34a')
-                            : (theme?.incorrect_feedback_accent || '#dc2626'),
-                        }}
-                      >
-                        {feedback.correct ? 'Correct!' : 'Incorrect'}
-                      </p>
-                      <p className="text-gray-700 text-sm sm:text-base">{feedback.explanation}</p>
-                    </div>
-
-                    <div
-                      className="game-spacer"
-                      style={{
-                        height: spacingConfig.spacerHeight,
-                      }}
-                    />
-
-                    <button
-                      onClick={nextQuestion}
-                      disabled={loading}
-                      className="w-full font-bold py-3 sm:py-4 px-6 rounded-xl transition-transform flex-shrink-0 active:scale-95"
-                      style={{
-                        backgroundColor: theme?.button_fill_color || '#3b82f6',
-                        color: theme?.button_text_color || '#ffffff',
-                      }}
-                    >
-                      {loading ? 'Loading...' : feedback?.is_last_question ? 'View Results' : 'Next Question'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {error && <p className="mt-4 text-red-600 text-center text-sm bg-white px-4 py-2 rounded-lg">{error}</p>}
+              </div>
             </div>
           )}
+
+          {gameState === 'answered' && feedback && screens && (
+            <div className="flex-1 flex flex-col items-center justify-center text-center px-2">
+              {lastAnswerCorrect ? (
+                <CheckCircle
+                  className="w-14 h-14 sm:w-16 sm:h-16 mb-4"
+                  style={{ color: theme?.correct_feedback_accent }}
+                />
+              ) : (
+                <XCircle
+                  className="w-14 h-14 sm:w-16 sm:h-16 mb-4"
+                  style={{ color: theme?.incorrect_feedback_accent }}
+                />
+              )}
+              <h2
+                className="text-xl sm:text-2xl font-bold mb-3"
+                style={{ color: theme?.primary_text_color }}
+              >
+                {lastAnswerCorrect
+                  ? (screens.feedback?.correct_headline || 'Correct!')
+                  : (screens.feedback?.incorrect_headline || 'Incorrect')}
+              </h2>
+              {screens.feedback?.show_explanation && feedback.explanation && (
+                <p
+                  className="text-sm sm:text-base mb-6 max-w-sm"
+                  style={{ color: theme?.secondary_text_color }}
+                >
+                  {feedback.explanation}
+                </p>
+              )}
+              <button
+                onClick={moveToNext}
+                disabled={loading}
+                className="px-6 py-3 font-medium rounded-lg transition-transform active:scale-95"
+                style={{
+                  backgroundColor: theme?.button_fill_color,
+                  color: theme?.button_text_color,
+                }}
+              >
+                {loading ? 'Loading...' : (feedback?.is_last_question ? 'See Results' : 'Next Question')}
+              </button>
+            </div>
+          )}
+
+          {error && <p className="mt-4 text-red-600 text-center text-sm bg-white px-4 py-2 rounded-lg">{error}</p>}
         </StageBody>
 
         <StageFooter className="pb-4" />
