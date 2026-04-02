@@ -41,12 +41,35 @@ function getSpacingConfig(spacing: GameScreenSpacing = 'comfortable', customValu
 
 const SPACING_CONFIG = getSpacingConfig('comfortable');
 
-type GameState = 'start' | 'playing' | 'answered' | 'completed';
+type GameState = 'start' | 'playing' | 'answered' | 'lead_form' | 'completed';
 
 interface TriviaGameProps {
   campaign_id?: string;
   template_id?: string;
   return_url?: string;
+}
+
+interface LeadFormField {
+  type: 'name' | 'email' | 'phone' | 'text';
+  name: string;
+  label: string;
+  placeholder: string;
+  required: boolean;
+  enabled?: boolean;
+}
+
+interface LeadFormTerms {
+  enabled: boolean;
+  text: string;
+  required: boolean;
+}
+
+interface LeadFormConfig {
+  enabled?: boolean;
+  headline?: string;
+  fields?: LeadFormField[];
+  terms?: LeadFormTerms;
+  submit_label?: string;
 }
 
 interface ShellData {
@@ -67,12 +90,14 @@ interface ShellData {
       default?: string;
       start?: string | null;
       game?: string | null;
+      lead?: string | null;
       end?: string | null;
     };
     screens?: {
       start?: { headline?: string; body?: string; button_label?: string };
       game?: { show_progress_bar?: boolean; show_question_number?: boolean; spacing?: GameScreenSpacing; custom_spacing_value?: number };
       feedback?: { correct_headline?: string; incorrect_headline?: string; show_explanation?: boolean };
+      lead?: LeadFormConfig;
       end?: {
         headline_template?: string;
         show_score_breakdown?: boolean;
@@ -108,6 +133,9 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [timerActive, setTimerActive] = useState(false);
   const [lastAnswerCorrect, setLastAnswerCorrect] = useState<boolean | null>(null);
+  const [leadFormData, setLeadFormData] = useState<Record<string, string>>({});
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [leadFormErrors, setLeadFormErrors] = useState<Record<string, string>>({});
 
   // Timer countdown effect
   useEffect(() => {
@@ -271,6 +299,18 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
 
   async function moveToNext() {
     if (feedback?.is_last_question) {
+      // Check if lead form is enabled and should be shown
+      const leadConfig = shellData?.config?.screens?.lead;
+      const hasEnabledFields = leadConfig?.fields?.some(field => field.enabled !== false);
+
+      if (leadConfig && hasEnabledFields) {
+        // Transition to lead form before completing
+        setGameState('lead_form');
+        setLoading(false);
+        return;
+      }
+
+      // No lead form, go directly to completion
       await completeGame();
       return;
     }
@@ -325,6 +365,93 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
       const response = data.data as CompleteSessionResponse;
       setCompletionData(response);
       setGameState('completed');
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function validateEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  }
+
+  function validatePhone(phone: string): boolean {
+    const digitsOnly = phone.replace(/\D/g, '');
+    return digitsOnly.length === 10;
+  }
+
+  async function handleLeadFormSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLeadFormErrors({});
+    setError('');
+
+    const leadConfig = shellData?.config?.screens?.lead;
+    if (!leadConfig?.fields) return;
+
+    // Validate form fields
+    const errors: Record<string, string> = {};
+    const enabledFields = leadConfig.fields.filter(field => field.enabled !== false);
+
+    for (const field of enabledFields) {
+      const value = leadFormData[field.name]?.trim() || '';
+
+      if (field.required && !value) {
+        errors[field.name] = `${field.label} is required`;
+        continue;
+      }
+
+      if (value) {
+        if (field.type === 'email' && !validateEmail(value)) {
+          errors[field.name] = 'Please enter a valid email address';
+        }
+
+        if (field.type === 'phone' && !validatePhone(value)) {
+          errors[field.name] = 'Please enter a valid 10 digit phone number';
+        }
+      }
+    }
+
+    // Validate terms if required
+    if (leadConfig.terms?.enabled && leadConfig.terms?.required && !termsAccepted) {
+      errors.terms = 'You must accept the terms to continue';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setLeadFormErrors(errors);
+      return;
+    }
+
+    // Submit lead data
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('trivia-lead', {
+        body: {
+          session_id: sessionId,
+          data: leadFormData,
+          terms_accepted: termsAccepted,
+        },
+      });
+
+      if (error) throw error;
+
+      if (!data.success) {
+        if (data.error?.details) {
+          const validationErrors: Record<string, string> = {};
+          for (const detail of data.error.details) {
+            validationErrors[detail.field] = detail.message;
+          }
+          setLeadFormErrors(validationErrors);
+        } else {
+          setError(data.error?.message || 'Failed to submit lead form');
+        }
+        return;
+      }
+
+      // Lead captured successfully, proceed to completion
+      await completeGame();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -410,6 +537,7 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
   const getBackground = () => {
     if (gameState === 'start' && backgrounds?.start) return backgrounds.start;
     if ((gameState === 'playing' || gameState === 'answered') && backgrounds?.game) return backgrounds.game;
+    if (gameState === 'lead_form' && backgrounds?.lead) return backgrounds.lead;
     if (gameState === 'completed' && backgrounds?.end) return backgrounds.end;
     return backgrounds?.default || 'https://images.pexels.com/photos/1939485/pexels-photo-1939485.jpeg';
   };
@@ -444,13 +572,13 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
               className="text-3xl sm:text-4xl font-bold mb-3"
               style={{ color: theme?.primary_text_color || '#ffffff' }}
             >
-              {screens?.start?.headline || shellData?.internal_name || 'Trivia Challenge'}
+              {screens?.start?.headline || 'Ready to Play?'}
             </h1>
             <p
               className="mb-6 text-base sm:text-lg max-w-md"
               style={{ color: theme?.secondary_text_color || '#e5e7eb' }}
             >
-              {screens?.start?.body || shellData?.topic || 'Test your knowledge across various topics!'}
+              {screens?.start?.body || 'Test your knowledge!'}
             </p>
             <button
               onClick={startGame}
@@ -464,6 +592,105 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
               {loading ? 'Starting...' : (screens?.start?.button_label || 'Start Quiz')}
             </button>
             {error && <p className="mt-4 text-red-600 text-center text-sm bg-white px-4 py-2 rounded-lg">{error}</p>}
+          </StageBody>
+        </div>
+      </GameStage>
+    );
+  }
+
+  if (gameState === 'lead_form') {
+    const leadConfig = shellData?.config?.screens?.lead;
+    const enabledFields = leadConfig?.fields?.filter(field => field.enabled !== false) || [];
+
+    return (
+      <GameStage backgroundImage={getBackground()} overlayColor={theme?.overlay_tint || 'rgba(0,0,0,0.5)'}>
+        <div className="flex flex-col h-full" style={{ fontFamily: theme?.font_family || 'inherit' }}>
+          <StageBody className="flex flex-col items-center justify-center px-6">
+            <div className="w-full max-w-md">
+              <h1
+                className="text-2xl sm:text-3xl font-bold mb-6 text-center"
+                style={{ color: theme?.primary_text_color || '#ffffff' }}
+              >
+                {leadConfig?.headline || 'Complete Your Entry'}
+              </h1>
+
+              <form onSubmit={handleLeadFormSubmit} className="space-y-4">
+                {enabledFields.map((field) => (
+                  <div key={field.name}>
+                    <label
+                      htmlFor={field.name}
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: theme?.secondary_text_color || '#e5e7eb' }}
+                    >
+                      {field.label}
+                      {field.required && <span className="text-red-400 ml-1">*</span>}
+                    </label>
+                    <input
+                      type={field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : 'text'}
+                      id={field.name}
+                      name={field.name}
+                      placeholder={field.placeholder}
+                      value={leadFormData[field.name] || ''}
+                      onChange={(e) => setLeadFormData({ ...leadFormData, [field.name]: e.target.value })}
+                      className="w-full px-4 py-3 rounded-lg bg-white/10 backdrop-blur-sm border-2 focus:outline-none focus:ring-2 transition-all"
+                      style={{
+                        borderColor: leadFormErrors[field.name] ? '#f56565' : 'rgba(255,255,255,0.2)',
+                        color: theme?.primary_text_color || '#ffffff',
+                      }}
+                    />
+                    {leadFormErrors[field.name] && (
+                      <p className="mt-1 text-sm text-red-400">{leadFormErrors[field.name]}</p>
+                    )}
+                  </div>
+                ))}
+
+                {leadConfig?.terms?.enabled && (
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      id="terms"
+                      checked={termsAccepted}
+                      onChange={(e) => setTermsAccepted(e.target.checked)}
+                      className="mt-1 w-4 h-4 rounded border-2 focus:ring-2 transition-all"
+                      style={{
+                        borderColor: leadFormErrors.terms ? '#f56565' : 'rgba(255,255,255,0.4)',
+                      }}
+                    />
+                    <div>
+                      <label
+                        htmlFor="terms"
+                        className="text-sm cursor-pointer"
+                        style={{ color: theme?.secondary_text_color || '#e5e7eb' }}
+                      >
+                        {leadConfig.terms.text}
+                        {leadConfig.terms.required && <span className="text-red-400 ml-1">*</span>}
+                      </label>
+                      {leadFormErrors.terms && (
+                        <p className="mt-1 text-sm text-red-400">{leadFormErrors.terms}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3 sm:py-4 text-base font-bold rounded-xl transition-transform disabled:opacity-50 active:scale-95"
+                  style={{
+                    backgroundColor: theme?.button_fill_color || '#3b82f6',
+                    color: theme?.button_text_color || '#ffffff',
+                  }}
+                >
+                  {loading ? 'Submitting...' : (leadConfig?.submit_label || 'Submit')}
+                </button>
+
+                {error && (
+                  <p className="text-red-400 text-center text-sm bg-white/10 backdrop-blur-sm px-4 py-2 rounded-lg">
+                    {error}
+                  </p>
+                )}
+              </form>
+            </div>
           </StageBody>
         </div>
       </GameStage>
