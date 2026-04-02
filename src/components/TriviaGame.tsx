@@ -137,6 +137,33 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [leadFormErrors, setLeadFormErrors] = useState<Record<string, string>>({});
 
+  // Pre-load shell data on mount for start screen background
+  useEffect(() => {
+    async function loadShellData() {
+      if (!template_id) {
+        setValidationError('Invalid or missing game link.');
+        return;
+      }
+
+      try {
+        const { data: shell, error } = await supabase
+          .from('trivia_shells')
+          .select('internal_name, topic, config')
+          .eq('id', template_id)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (shell) {
+          setShellData(shell as ShellData);
+        }
+      } catch (err) {
+        console.error('Error loading shell data:', err);
+      }
+    }
+
+    loadShellData();
+  }, [template_id]);
+
   // Timer countdown effect
   useEffect(() => {
     if (!timerActive || timeRemaining <= 0 || timerMode === 'none') return;
