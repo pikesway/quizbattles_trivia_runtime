@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Share2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { GameStage, StageHeader, StageBody, StageFooter } from './runtime/GameStage';
@@ -48,6 +48,11 @@ interface TriviaGameProps {
   return_url?: string;
 }
 
+interface ShellMetadata {
+  internal_name: string;
+  topic: string;
+}
+
 export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameProps) {
   const [gameState, setGameState] = useState<GameState>('start');
   const [sessionId, setSessionId] = useState<string>('');
@@ -61,6 +66,31 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
   const [currentQuestionNum, setCurrentQuestionNum] = useState(0);
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [validationError, setValidationError] = useState<string>('');
+  const [shellMetadata, setShellMetadata] = useState<ShellMetadata | null>(null);
+
+  useEffect(() => {
+    if (template_id) {
+      fetchShellMetadata();
+    }
+  }, [template_id]);
+
+  async function fetchShellMetadata() {
+    try {
+      const { data, error } = await supabase
+        .from('trivia_shells')
+        .select('internal_name, topic')
+        .eq('slug', template_id)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        setShellMetadata(data);
+      }
+    } catch (err) {
+      console.error('Error fetching shell metadata:', err);
+    }
+  }
 
   async function startGame() {
     if (!template_id) {
@@ -279,10 +309,10 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
           <StageBody className="flex flex-col items-center justify-center px-6">
             <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-sm">
               <h1 className="text-3xl sm:text-4xl font-bold text-gray-800 mb-3 text-center">
-                Trivia Challenge
+                {shellMetadata?.internal_name || 'Trivia Challenge'}
               </h1>
               <p className="text-gray-600 mb-6 text-center text-sm sm:text-base">
-                Test your knowledge across various topics!
+                {shellMetadata?.topic || 'Test your knowledge across various topics!'}
               </p>
               <button
                 onClick={startGame}
