@@ -111,6 +111,11 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
 
       if (error) throw error;
 
+      if (!data.success) {
+        setError(data.error || 'Failed to start game');
+        return;
+      }
+
       const response = data.data as StartSessionResponse;
       setSessionId(response.session_id);
       setCurrentQuestion(response.question);
@@ -140,6 +145,11 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
 
       if (error) throw error;
 
+      if (!data.success) {
+        setError(data.error || 'Failed to submit answer');
+        return;
+      }
+
       const response = data.data as SubmitAnswerResponse;
       setFeedback(response);
       setGameState('answered');
@@ -166,6 +176,11 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
 
       if (error) throw error;
 
+      if (!data.success) {
+        setError(data.error || 'Failed to load next question');
+        return;
+      }
+
       const response = data.data as NextQuestionResponse;
       setCurrentQuestion(response.question);
       setCurrentQuestionNum(response.current_question);
@@ -189,6 +204,11 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
       });
 
       if (error) throw error;
+
+      if (!data.success) {
+        setError(data.error || 'Failed to complete game');
+        return;
+      }
 
       const response = data.data as CompleteSessionResponse;
       setCompletionData(response);
