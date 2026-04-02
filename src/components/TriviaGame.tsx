@@ -566,7 +566,7 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
     if ((gameState === 'playing' || gameState === 'answered') && backgrounds?.game) return backgrounds.game;
     if (gameState === 'lead_form' && backgrounds?.lead) return backgrounds.lead;
     if (gameState === 'completed' && backgrounds?.end) return backgrounds.end;
-    return backgrounds?.default || 'https://images.pexels.com/photos/1939485/pexels-photo-1939485.jpeg';
+    return backgrounds?.default || '#000000';
   };
 
   const spacingConfig = getSpacingConfig(screens?.game?.spacing, screens?.game?.custom_spacing_value);
