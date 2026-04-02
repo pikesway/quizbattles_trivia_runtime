@@ -42,12 +42,15 @@ Deno.serve(async (req: Request) => {
     // Parse request body
     const { template_id, campaign_id, campaign_game_instance_id, lead_id } = await req.json();
 
-    // STEP 1: Fetch the shell
+    // Debug logging
+    console.log('Received template_id:', template_id);
+    console.log('Received campaign_id:', campaign_id);
+
+    // STEP 1: Fetch the shell by ID (template_id is the shell UUID)
     const { data: shell, error: shellError } = await supabase
       .from('trivia_shells')
       .select('*')
-      .eq('slug', template_id)
-      .eq('status', 'active')
+      .eq('id', template_id)
       .maybeSingle();
 
     if (shellError) {
