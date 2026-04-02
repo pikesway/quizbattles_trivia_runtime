@@ -177,7 +177,7 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
   }
 
   async function handleAnswerSelect(answerId: string) {
-    if (selectedAnswer) return; // Prevent multiple selections
+    if (selectedAnswer || loading) return; // Prevent multiple selections
 
     setSelectedAnswer(answerId);
     setTimerActive(false);
@@ -198,6 +198,7 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
 
       if (!data.success) {
         setError(data.error || 'Failed to submit answer');
+        setLoading(false);
         return;
       }
 
@@ -208,29 +209,63 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
       // Check if we should show feedback screen or auto-advance
       if (shellData?.config?.screens?.feedback?.show_explanation && response.explanation) {
         setGameState('answered');
+        setLoading(false);
       } else {
         // Auto-advance after brief delay
-        setTimeout(() => moveToNext(), 500);
+        setTimeout(() => {
+          setLoading(false);
+          moveToNext();
+        }, 500);
       }
     } catch (err) {
       setError((err as Error).message);
-    } finally {
       setLoading(false);
     }
   }
 
-  function handleTimeUp() {
-    if (selectedAnswer) return; // Already answered
+  async function handleTimeUp() {
+    if (selectedAnswer || loading) return; // Already answered or processing
 
     setTimerActive(false);
+    setSelectedAnswer('TIME_UP'); // Mark as timed out
     setLastAnswerCorrect(false);
+    setLoading(true);
 
-    // Submit with no answer selected (will be marked incorrect)
-    // For now, just move to next or show feedback
-    if (shellData?.config?.screens?.feedback?.show_explanation) {
-      setGameState('answered');
-    } else {
-      moveToNext();
+    try {
+      // Submit time-up as incorrect answer
+      const { data, error } = await supabase.functions.invoke('trivia-answer', {
+        body: {
+          session_id: sessionId,
+          selected_answer_id: null, // No answer selected
+          time_to_answer_ms: timerSeconds * 1000,
+        },
+      });
+
+      if (error) throw error;
+
+      if (!data.success) {
+        setError(data.error || 'Failed to submit answer');
+        setLoading(false);
+        return;
+      }
+
+      const response = data.data as SubmitAnswerResponse;
+      setFeedback(response);
+
+      // Check if we should show feedback screen or auto-advance
+      if (shellData?.config?.screens?.feedback?.show_explanation && response.explanation) {
+        setGameState('answered');
+        setLoading(false);
+      } else {
+        // Auto-advance after brief delay
+        setTimeout(() => {
+          setLoading(false);
+          moveToNext();
+        }, 500);
+      }
+    } catch (err) {
+      setError((err as Error).message);
+      setLoading(false);
     }
   }
 
@@ -628,7 +663,7 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
                   <div className={`${spacingConfig.answerGap} flex-shrink-0`}>
                     {currentQuestion.answers.map((answer: any) => {
                       const isSelected = selectedAnswer === answer.answer_id;
-                      const showResult = selectedAnswer !== null && feedback;
+                      const showResult = feedback !== null;
                       const isCorrect = showResult && answer.answer_id === feedback.correct_answer_id;
 
                       let borderColor = 'rgba(255,255,255,0.2)';
@@ -651,7 +686,7 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
                         <button
                           key={answer.answer_id}
                           onClick={() => handleAnswerSelect(answer.answer_id)}
-                          disabled={selectedAnswer !== null}
+                          disabled={selectedAnswer !== '' || loading}
                           className={`w-full ${spacingConfig.answerPadding} rounded-lg text-center border-2 transition-all disabled:cursor-default text-sm sm:text-base`}
                           style={{
                             borderColor,
@@ -677,7 +712,7 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
             </div>
           )}
 
-          {gameState === 'answered' && feedback && screens && (
+          {gameState === 'answered' && feedback && (
             <div className="flex-1 flex flex-col items-center justify-center text-center px-2">
               {lastAnswerCorrect ? (
                 <CheckCircle
@@ -695,10 +730,10 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
                 style={{ color: theme?.primary_text_color }}
               >
                 {lastAnswerCorrect
-                  ? (screens.feedback?.correct_headline || 'Correct!')
-                  : (screens.feedback?.incorrect_headline || 'Incorrect')}
+                  ? (screens?.feedback?.correct_headline || 'Correct!')
+                  : (screens?.feedback?.incorrect_headline || 'Incorrect')}
               </h2>
-              {screens.feedback?.show_explanation && feedback.explanation && (
+              {screens?.feedback?.show_explanation && feedback.explanation && (
                 <p
                   className="text-sm sm:text-base mb-6 max-w-sm"
                   style={{ color: theme?.secondary_text_color }}
