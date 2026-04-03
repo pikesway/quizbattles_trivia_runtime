@@ -77,6 +77,7 @@ interface ShellData {
   internal_name: string;
   topic: string;
   config: {
+    ui?: { background_url?: string };
     theme?: {
       font_family?: string;
       primary_text_color?: string;
@@ -567,6 +568,12 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
   const screens = shellData?.config?.screens;
 
   const getBackground = () => {
+    // 1. Check for the campaign-level override first
+    if (shellData?.config?.ui?.background_url) {
+      return shellData.config.ui.background_url;
+    }
+
+    // 2. Fall back to the default shell backgrounds
     if (gameState === 'start' && backgrounds?.start) return backgrounds.start;
     if ((gameState === 'playing' || gameState === 'answered') && backgrounds?.game) return backgrounds.game;
     if (gameState === 'lead_form' && backgrounds?.lead) return backgrounds.lead;
