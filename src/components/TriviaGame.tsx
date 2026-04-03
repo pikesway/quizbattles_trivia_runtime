@@ -147,15 +147,19 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
       }
 
       try {
-        const { data: shell, error } = await supabase
-          .from('trivia_shells')
-          .select('internal_name, topic, config')
-          .eq('id', template_id)
-          .maybeSingle();
+        const { data, error } = await supabase.functions.invoke('trivia-get-config', {
+          body: {
+            template_id,
+            instance_id: instance_id || 'standalone-instance',
+          },
+        });
 
         if (error) throw error;
-        if (shell) {
-          setShellData(shell as ShellData);
+
+        if (data?.success) {
+          setShellData(data.data as ShellData);
+        } else {
+          console.error('Failed to load config:', data?.error);
         }
       } catch (err) {
         console.error('Error loading shell data:', err);
@@ -163,7 +167,7 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
     }
 
     loadShellData();
-  }, [template_id]);
+  }, [template_id, instance_id]);
 
   // Timer countdown effect
   useEffect(() => {
