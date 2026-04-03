@@ -775,7 +775,7 @@ export function TestQuiz({ token }: TestQuizProps) {
           )}
         </StageBody>
 
-        <StageFooter className="pb-4" />
+        <StageFooter className="pb-4"><div /></StageFooter>
       </div>
 
       {showShareMenu && (

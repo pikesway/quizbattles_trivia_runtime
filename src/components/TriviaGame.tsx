@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Share2, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { GameStage, StageHeader, StageBody, StageFooter } from './runtime/GameStage';
@@ -38,8 +38,6 @@ function getSpacingConfig(spacing: GameScreenSpacing = 'comfortable', customValu
       return { spacerHeight: SPACING_PRESETS.comfortable, answerGap: 'space-y-2 sm:space-y-3', answerPadding: 'p-3 sm:p-4' };
   }
 }
-
-const SPACING_CONFIG = getSpacingConfig('comfortable');
 
 type GameState = 'start' | 'playing' | 'answered' | 'lead_form' | 'completed';
 
@@ -138,6 +136,7 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
   const [leadFormData, setLeadFormData] = useState<Record<string, string>>({});
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [leadFormErrors, setLeadFormErrors] = useState<Record<string, string>>({});
+  const [configLoadFailed, setConfigLoadFailed] = useState(false);
 
   // Pre-load shell data on mount for start screen background
   useEffect(() => {
@@ -148,6 +147,7 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
       }
 
       try {
+        setConfigLoadFailed(false);
         const { data, error } = await supabase.functions.invoke('trivia-get-config', {
           body: {
             template_id,
@@ -161,14 +161,59 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
           setShellData(data.data as ShellData);
         } else {
           console.error('Failed to load config:', data?.error);
+          setConfigLoadFailed(true);
         }
       } catch (err) {
         console.error('Error loading shell data:', err);
+        setConfigLoadFailed(true);
       }
     }
 
     loadShellData();
   }, [template_id, instance_id]);
+
+  const handleTimeUp = useCallback(async () => {
+    if (selectedAnswer || loading) return;
+
+    setTimerActive(false);
+    setSelectedAnswer('TIME_UP');
+    setLastAnswerCorrect(false);
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('trivia-answer', {
+        body: {
+          session_id: sessionId,
+          selected_answer_id: null,
+          time_to_answer_ms: timerSeconds * 1000,
+        },
+      });
+
+      if (error) throw error;
+
+      if (!data.success) {
+        setError(data.error || 'Failed to submit answer');
+        setLoading(false);
+        return;
+      }
+
+      const response = data.data as SubmitAnswerResponse;
+      setFeedback(response);
+
+      if (shellData?.config?.screens?.feedback?.show_explanation && response.explanation) {
+        setGameState('answered');
+        setLoading(false);
+      } else {
+        setTimeout(() => {
+          setLoading(false);
+          moveToNext();
+        }, 500);
+      }
+    } catch (err) {
+      setError((err as Error).message);
+      setLoading(false);
+    }
+  }, [selectedAnswer, loading, sessionId, timerSeconds, shellData?.config?.screens?.feedback?.show_explanation]);
 
   // Timer countdown effect
   useEffect(() => {
@@ -185,7 +230,7 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [timerActive, timeRemaining, timerMode]);
+  }, [timerActive, timeRemaining, timerMode, handleTimeUp]);
 
   async function startGame() {
     if (!template_id) {
@@ -231,7 +276,7 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
 
       setGameState('playing');
     } catch (err) {
-      setError((err as Error).message);
+      setError(`Connection error: ${(err as Error).message}`);
     } finally {
       setLoading(false);
     }
@@ -266,52 +311,6 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
       const response = data.data as SubmitAnswerResponse;
       setFeedback(response);
       setLastAnswerCorrect(response.correct);
-
-      // Check if we should show feedback screen or auto-advance
-      if (shellData?.config?.screens?.feedback?.show_explanation && response.explanation) {
-        setGameState('answered');
-        setLoading(false);
-      } else {
-        // Auto-advance after brief delay
-        setTimeout(() => {
-          setLoading(false);
-          moveToNext();
-        }, 500);
-      }
-    } catch (err) {
-      setError((err as Error).message);
-      setLoading(false);
-    }
-  }
-
-  async function handleTimeUp() {
-    if (selectedAnswer || loading) return; // Already answered or processing
-
-    setTimerActive(false);
-    setSelectedAnswer('TIME_UP'); // Mark as timed out
-    setLastAnswerCorrect(false);
-    setLoading(true);
-
-    try {
-      // Submit time-up as incorrect answer
-      const { data, error } = await supabase.functions.invoke('trivia-answer', {
-        body: {
-          session_id: sessionId,
-          selected_answer_id: null, // No answer selected
-          time_to_answer_ms: timerSeconds * 1000,
-        },
-      });
-
-      if (error) throw error;
-
-      if (!data.success) {
-        setError(data.error || 'Failed to submit answer');
-        setLoading(false);
-        return;
-      }
-
-      const response = data.data as SubmitAnswerResponse;
-      setFeedback(response);
 
       // Check if we should show feedback screen or auto-advance
       if (shellData?.config?.screens?.feedback?.show_explanation && response.explanation) {
@@ -582,6 +581,35 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
   };
 
   const spacingConfig = getSpacingConfig(screens?.game?.spacing, screens?.game?.custom_spacing_value);
+
+  const retryLoadConfig = () => {
+    window.location.reload();
+  };
+
+  if (configLoadFailed) {
+    return (
+      <GameStage backgroundImage="#1a1a1a" overlayColor="rgba(0,0,0,0.5)">
+        <div className="flex flex-col h-full" style={{ fontFamily: 'Inter, sans-serif' }}>
+          <StageBody className="flex flex-col items-center justify-center px-6">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-sm">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-3 text-center">
+                Failed to Load Game
+              </h1>
+              <p className="text-gray-600 text-center text-sm sm:text-base mb-6">
+                Unable to connect to the game server. Please check your connection and try again.
+              </p>
+              <button
+                onClick={retryLoadConfig}
+                className="w-full px-6 py-3 bg-blue-600 text-white font-bold rounded-xl transition-transform active:scale-95 hover:bg-blue-700"
+              >
+                Retry
+              </button>
+            </div>
+          </StageBody>
+        </div>
+      </GameStage>
+    );
+  }
 
   if (validationError) {
     return (
@@ -879,7 +907,7 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
   return (
     <GameStage backgroundImage={getBackground()} overlayColor={theme?.overlay_tint || 'rgba(0,0,0,0.5)'}>
       <div className="flex flex-col h-full" style={{ fontFamily: theme?.font_family || 'Inter' }}>
-        <StageHeader className="px-4 pt-3 pb-2" />
+        <StageHeader className="px-4 pt-3 pb-2"><div /></StageHeader>
 
         <StageBody className="flex flex-col px-4">
           {gameState === 'playing' && currentQuestion && (
@@ -1024,7 +1052,7 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
           {error && <p className="mt-4 text-red-600 text-center text-sm bg-white px-4 py-2 rounded-lg">{error}</p>}
         </StageBody>
 
-        <StageFooter className="pb-4" />
+        <StageFooter className="pb-4"><div /></StageFooter>
       </div>
     </GameStage>
   );

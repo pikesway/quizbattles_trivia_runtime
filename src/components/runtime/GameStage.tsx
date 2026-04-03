@@ -35,6 +35,7 @@ export function GameStage({ children, backgroundImage, overlayColor }: GameStage
           backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
         }}
       >
         <div

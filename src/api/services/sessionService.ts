@@ -229,6 +229,7 @@ export class SessionService {
     return {
       score,
       total,
+      percentage: Math.round((score / total) * 100),
       message,
       correct_answers: session.correct_answers,
     };
