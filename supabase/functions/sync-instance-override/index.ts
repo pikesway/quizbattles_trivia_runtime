@@ -2,13 +2,14 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-interface WebhookPayload {
+interface InstanceOverridePayload {
+  instance_id: string;
   campaign_id: string;
-  settings: Record<string, any>;
+  settings: Record<string, unknown>;
 }
 
 Deno.serve(async (req: Request) => {
@@ -37,14 +38,13 @@ Deno.serve(async (req: Request) => {
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!supabaseUrl || !supabaseServiceRoleKey) {
-      console.error("Missing required environment variables");
+    if (!supabaseUrl || !supabaseServiceKey) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: "Server configuration error",
+          error: "Server configuration error: Missing environment variables.",
         }),
         {
           status: 200,
@@ -56,22 +56,33 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    let payload: WebhookPayload;
+    let payload: InstanceOverridePayload;
+
     try {
       payload = await req.json();
-    } catch (parseError) {
-      console.error("JSON parse error:", parseError);
+    } catch {
       return new Response(
         JSON.stringify({
           success: false,
-          error: "Invalid JSON payload",
+          error: "Invalid JSON payload.",
+        }),
+        {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    }
+
+    if (!payload.instance_id || typeof payload.instance_id !== "string") {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Missing or invalid required field: instance_id (must be a string).",
         }),
         {
           status: 200,
@@ -87,7 +98,7 @@ Deno.serve(async (req: Request) => {
       return new Response(
         JSON.stringify({
           success: false,
-          error: "Missing or invalid campaign_id",
+          error: "Missing or invalid required field: campaign_id (must be a string).",
         }),
         {
           status: 200,
@@ -99,11 +110,11 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    if (!payload.settings || typeof payload.settings !== "object") {
+    if (!payload.settings || typeof payload.settings !== "object" || Array.isArray(payload.settings)) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: "Missing or invalid settings object",
+          error: "Missing or invalid required field: settings (must be an object).",
         }),
         {
           status: 200,
@@ -116,21 +127,21 @@ Deno.serve(async (req: Request) => {
     }
 
     const { data, error } = await supabase
-      .from("trivia_campaign_overrides")
+      .from("trivia_instance_overrides")
       .upsert(
         {
+          instance_id: payload.instance_id,
           campaign_id: payload.campaign_id,
           settings: payload.settings,
         },
         {
-          onConflict: "campaign_id",
+          onConflict: "instance_id",
         }
       )
-      .select()
-      .maybeSingle();
+      .select("instance_id, campaign_id, updated_at")
+      .single();
 
     if (error) {
-      console.error("Database upsert error:", error);
       return new Response(
         JSON.stringify({
           success: false,
@@ -150,8 +161,9 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         data: {
-          campaign_id: data?.campaign_id,
-          updated_at: data?.updated_at,
+          instance_id: data.instance_id,
+          campaign_id: data.campaign_id,
+          updated_at: data.updated_at,
         },
       }),
       {
@@ -163,11 +175,10 @@ Deno.serve(async (req: Request) => {
       }
     );
   } catch (error) {
-    console.error("Unexpected error in sync-campaign-override:", error);
     return new Response(
       JSON.stringify({
         success: false,
-        error: "An unexpected error occurred",
+        error: `Unexpected error: ${error instanceof Error ? error.message : "Unknown error"}`,
       }),
       {
         status: 200,
