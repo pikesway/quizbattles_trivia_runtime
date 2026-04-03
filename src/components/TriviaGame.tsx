@@ -46,6 +46,7 @@ type GameState = 'start' | 'playing' | 'answered' | 'lead_form' | 'completed';
 interface TriviaGameProps {
   campaign_id?: string;
   template_id?: string;
+  instance_id?: string;
   return_url?: string;
 }
 
@@ -114,7 +115,7 @@ interface ShellData {
   };
 }
 
-export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameProps) {
+export function TriviaGame({ campaign_id, template_id, instance_id, return_url }: TriviaGameProps) {
   const [gameState, setGameState] = useState<GameState>('start');
   const [sessionId, setSessionId] = useState<string>('');
   const [currentQuestion, setCurrentQuestion] = useState<any>(null);
@@ -194,7 +195,7 @@ export function TriviaGame({ campaign_id, template_id, return_url }: TriviaGameP
         body: {
           template_id,
           campaign_id: campaign_id || 'standalone-play',
-          campaign_game_instance_id: 'standalone-instance',
+          campaign_game_instance_id: instance_id || 'standalone-instance',
         },
       });
 
