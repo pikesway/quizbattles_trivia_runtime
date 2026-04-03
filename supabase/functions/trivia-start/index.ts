@@ -27,6 +27,42 @@ function shuffleArray<T>(array: T[]): T[] {
   return shuffled;
 }
 
+function deepMerge<T extends Record<string, any>>(target: T, source: Partial<T>): T {
+  const result = { ...target };
+
+  for (const key in source) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      const sourceValue = source[key];
+      const targetValue = result[key];
+
+      // If source value is null or undefined, skip it
+      if (sourceValue === null || sourceValue === undefined) {
+        continue;
+      }
+
+      // If source value is an array, completely replace the target array
+      if (Array.isArray(sourceValue)) {
+        result[key] = sourceValue as any;
+      }
+      // If both values are plain objects, recursively merge them
+      else if (
+        typeof sourceValue === 'object' &&
+        typeof targetValue === 'object' &&
+        !Array.isArray(targetValue) &&
+        targetValue !== null
+      ) {
+        result[key] = deepMerge(targetValue, sourceValue) as any;
+      }
+      // Otherwise, directly assign the source value
+      else {
+        result[key] = sourceValue as any;
+      }
+    }
+  }
+
+  return result;
+}
+
 Deno.serve(async (req: Request) => {
   // CORS preflight - MUST be first line
   if (req.method === 'OPTIONS') {
@@ -66,6 +102,26 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ success: false, error: 'Shell not found.' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // STEP 1.5: Fetch instance overrides if campaign_game_instance_id is provided
+    let instanceOverrides = {};
+    if (campaign_game_instance_id) {
+      console.log('Fetching overrides for instance_id:', campaign_game_instance_id);
+      const { data: overrideData, error: overrideError } = await supabase
+        .from('trivia_instance_overrides')
+        .select('settings')
+        .eq('instance_id', campaign_game_instance_id)
+        .maybeSingle();
+
+      if (overrideError) {
+        console.error('Override query error (continuing with defaults):', overrideError);
+      } else if (overrideData) {
+        instanceOverrides = overrideData.settings || {};
+        console.log('Instance overrides found:', Object.keys(instanceOverrides));
+      } else {
+        console.log('No instance overrides found, using shell defaults');
+      }
     }
 
     // Extract shell properties
@@ -185,6 +241,9 @@ Deno.serve(async (req: Request) => {
       ],
     };
 
+    // Apply instance overrides using deep merge
+    const finalConfig = deepMerge(config, instanceOverrides);
+
     // Create game session
     const now = new Date().toISOString();
     const { data: session, error: sessionError } = await supabase
@@ -198,11 +257,11 @@ Deno.serve(async (req: Request) => {
         score: 0,
         total_questions: question_count,
         correct_answers: 0,
-        timer_mode: config.timer.mode,
-        timer_seconds: config.timer.seconds,
+        timer_mode: finalConfig.timer.mode,
+        timer_seconds: finalConfig.timer.seconds,
         question_set: questionSet,
         current_index: 0,
-        config: config,
+        config: finalConfig,
         current_question_started_at: now,
       })
       .select()
@@ -238,9 +297,9 @@ Deno.serve(async (req: Request) => {
             question_text: firstQuestion.question_text,
             answers: publicAnswers,
           },
-          ui: config.ui,
-          lead_capture: config.lead_capture,
-          timer: config.timer,
+          ui: finalConfig.ui,
+          lead_capture: finalConfig.lead_capture,
+          timer: finalConfig.timer,
           total_questions: question_count,
           current_question: 1,
         },
