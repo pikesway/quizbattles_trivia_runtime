@@ -105,8 +105,9 @@ Deno.serve(async (req: Request) => {
     }
 
     // STEP 1.5: Fetch instance overrides if campaign_game_instance_id is provided
+    // Skip override fetch for standalone placeholder values
     let instanceOverrides = {};
-    if (campaign_game_instance_id) {
+    if (campaign_game_instance_id && campaign_game_instance_id !== 'standalone-instance') {
       console.log('Fetching overrides for instance_id:', campaign_game_instance_id);
       const { data: overrideData, error: overrideError } = await supabase
         .from('trivia_instance_overrides')
@@ -122,6 +123,8 @@ Deno.serve(async (req: Request) => {
       } else {
         console.log('No instance overrides found, using shell defaults');
       }
+    } else if (campaign_game_instance_id === 'standalone-instance') {
+      console.log('Standalone session detected, skipping override fetch');
     }
 
     // Extract shell properties
@@ -244,14 +247,18 @@ Deno.serve(async (req: Request) => {
     // Apply instance overrides using deep merge
     const finalConfig = deepMerge(config, instanceOverrides);
 
+    // Sanitize foreign key IDs: convert standalone placeholders to null
+    const sanitizedCampaignId = campaign_id === 'standalone-play' ? null : (campaign_id || null);
+    const sanitizedInstanceId = campaign_game_instance_id === 'standalone-instance' ? null : (campaign_game_instance_id || null);
+
     // Create game session
     const now = new Date().toISOString();
     const { data: session, error: sessionError } = await supabase
       .from('trivia_game_sessions')
       .insert({
         shell_id: shell.id,
-        campaign_id: campaign_id || null,
-        campaign_game_instance_id: campaign_game_instance_id || null,
+        campaign_id: sanitizedCampaignId,
+        campaign_game_instance_id: sanitizedInstanceId,
         lead_id: lead_id || null,
         status: 'in_progress',
         score: 0,
