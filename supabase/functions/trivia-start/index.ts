@@ -291,7 +291,7 @@ Deno.serve(async (req: Request) => {
           shell: {
             internal_name: shell.internal_name,
             topic: shell.topic,
-            config: shell.config,
+            config: finalConfig,
           },
           question: {
             question_text: firstQuestion.question_text,
