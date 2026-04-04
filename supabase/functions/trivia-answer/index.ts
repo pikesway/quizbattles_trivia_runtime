@@ -60,7 +60,7 @@ Deno.serve(async (req: Request) => {
 
     const { session_id, selected_answer_id, time_to_answer_ms = 0 } = await req.json();
 
-    if (!session_id || !selected_answer_id) {
+    if (!session_id) {
       return new Response(
         JSON.stringify({
           success: false,
@@ -69,6 +69,8 @@ Deno.serve(async (req: Request) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const isTimeout = !selected_answer_id || selected_answer_id === null || selected_answer_id === '';
 
     const { data: session, error: sessionError } = await supabase
       .from('trivia_game_sessions')
@@ -96,7 +98,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    if (isTimerExpired(session)) {
+    if (!isTimeout && isTimerExpired(session)) {
       const completionData = await autoCompleteSession(supabase, session_id, session);
       return new Response(
         JSON.stringify({
@@ -108,7 +110,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    if (isQuestionTimerExpiredServerSide(session)) {
+    if (!isTimeout && isQuestionTimerExpiredServerSide(session)) {
       return new Response(
         JSON.stringify({
           success: false,
@@ -143,12 +145,12 @@ Deno.serve(async (req: Request) => {
       throw new Error('No correct answer found');
     }
 
-    const isCorrect = selected_answer_id === correctAnswer.answer_id;
+    const isCorrect = isTimeout ? false : selected_answer_id === correctAnswer.answer_id;
 
     await supabase.from('trivia_session_answers').insert({
       session_id,
       question_id: currentQuestion.question_id,
-      selected_answer_id,
+      selected_answer_id: isTimeout ? null : selected_answer_id,
       is_correct: isCorrect,
       time_to_answer_ms,
     });
