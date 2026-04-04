@@ -200,10 +200,12 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
       const response = data.data as SubmitAnswerResponse;
       setFeedback(response);
 
-      if (shellData?.config?.screens?.feedback?.show_explanation && response.explanation) {
+      // Always show feedback screen when configured
+      if (shellData?.config?.screens?.feedback?.show_explanation) {
         setGameState('answered');
         setLoading(false);
       } else {
+        // Auto-advance after brief delay only if feedback screen is disabled
         setTimeout(() => {
           setLoading(false);
           moveToNext();
@@ -312,12 +314,12 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
       setFeedback(response);
       setLastAnswerCorrect(response.correct);
 
-      // Check if we should show feedback screen or auto-advance
-      if (shellData?.config?.screens?.feedback?.show_explanation && response.explanation) {
+      // Always show feedback screen when configured
+      if (shellData?.config?.screens?.feedback?.show_explanation) {
         setGameState('answered');
         setLoading(false);
       } else {
-        // Auto-advance after brief delay
+        // Auto-advance after brief delay only if feedback screen is disabled
         setTimeout(() => {
           setLoading(false);
           moveToNext();
