@@ -9,6 +9,11 @@ interface TemplateResponse {
   id: string;
   name: string;
   status: string;
+  topic: string | null;
+  config: any;
+  default_question_count: number;
+  default_timer_seconds: number;
+  default_timer_mode: string;
 }
 
 Deno.serve(async (req: Request) => {
@@ -23,7 +28,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: shells, error } = await supabase
       .from('trivia_shells')
-      .select('id, internal_name, status')
+      .select('id, internal_name, topic, status, config, default_question_count, default_timer_seconds, default_timer_mode')
       .or('status.eq.active,status.eq.ready')
       .order('internal_name');
 
@@ -35,6 +40,11 @@ Deno.serve(async (req: Request) => {
       id: shell.id,
       name: shell.internal_name,
       status: shell.status,
+      topic: shell.topic,
+      config: shell.config,
+      default_question_count: shell.default_question_count,
+      default_timer_seconds: shell.default_timer_seconds,
+      default_timer_mode: shell.default_timer_mode,
     }));
 
     return new Response(
