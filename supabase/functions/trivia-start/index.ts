@@ -131,6 +131,7 @@ Deno.serve(async (req: Request) => {
     const topic = shell.topic;
     const tags = shell.tags || [];
     const question_count = instanceOverrides.question_count || shell.default_question_count || 10;
+    const selection_mode = instanceOverrides.question_mode || shell.default_selection_mode || 'random_per_play';
 
     // STEP 2: Query questions using Option C (PostgreSQL OR Query)
     let questionsQuery = supabase
@@ -169,8 +170,14 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Shuffle and take the exact count needed
-    const selectedQuestions = shuffleArray(fetchedQuestions).slice(0, question_count);
+    // Conditionally shuffle and take the exact count needed
+    let selectedQuestions;
+    if (selection_mode.toLowerCase() === 'fixed') {
+      // Sort by ID to guarantee identical deterministic order for all players
+      selectedQuestions = fetchedQuestions.sort((a, b) => a.id.localeCompare(b.id)).slice(0, question_count);
+    } else {
+      selectedQuestions = shuffleArray(fetchedQuestions).slice(0, question_count);
+    }
 
     // Fetch answers for selected questions
     const questionIds = selectedQuestions.map((q) => q.id);
@@ -194,18 +201,26 @@ Deno.serve(async (req: Request) => {
       answersMap.set(answer.question_id, [...existing, answer]);
     });
 
-    // Build question snapshot with shuffled answers
+    // Build question snapshot with conditionally shuffled answers
     const questionSet: QuestionSnapshot[] = selectedQuestions.map((question) => ({
       question_id: question.id,
       question_text: question.question_text,
       explanation: question.explanation || '',
-      answers: shuffleArray(
-        (answersMap.get(question.id) || []).map((a: any) => ({
-          answer_id: a.id,
-          answer_text: a.answer_text,
-          is_correct: a.is_correct,
-        }))
-      ),
+      answers: selection_mode.toLowerCase() === 'fixed'
+        ? (answersMap.get(question.id) || [])
+            .sort((a: any, b: any) => a.id.localeCompare(b.id))
+            .map((a: any) => ({
+              answer_id: a.id,
+              answer_text: a.answer_text,
+              is_correct: a.is_correct,
+            }))
+        : shuffleArray(
+            (answersMap.get(question.id) || []).map((a: any) => ({
+              answer_id: a.id,
+              answer_text: a.answer_text,
+              is_correct: a.is_correct,
+            }))
+          ),
     }));
 
     // Build config from shell defaults
