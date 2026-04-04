@@ -467,7 +467,9 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error?.message || 'Failed to connect to server');
+      if (!response.ok) {
+        throw new Error(data.error?.message || 'Failed to submit lead form');
+      }
 
       if (!data.success) {
         if (data.error?.details) {
