@@ -114,14 +114,12 @@ async function captureLeadOnPlatform(
     const lastName = nameParts.slice(1).join(' ') || '';
 
     const payload = {
-      event: 'lead_capture',
-      payload: {
-        campaign_id: session.campaign_id,
-        first_name: firstName,
-        last_name: lastName,
-        email: leadData.email || '',
-        phone: leadData.phone || '',
-      },
+      event_type: 'lead_capture',
+      campaign_id: session.campaign_id,
+      first_name: firstName,
+      last_name: lastName,
+      email: leadData.email || '',
+      phone: leadData.phone || '',
     };
 
     const controller = new AbortController();
