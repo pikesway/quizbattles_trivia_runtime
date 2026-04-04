@@ -110,13 +110,12 @@ async function sendGameCompleteWebhook(session: Record<string, unknown>): Promis
     const leadId = metadata.platform_lead_id || session.lead_id || null;
 
     const payload = {
-      event: 'game_complete',
-      payload: {
-        campaign_id: session.campaign_id,
-        lead_id: leadId,
-        final_score: session.correct_answers || 0,
-        time_elapsed_seconds: timeElapsedSeconds,
-      },
+      event_type: 'game_complete',
+      campaign_id: session.campaign_id,
+      instance_id: session.campaign_game_instance_id || null,
+      lead_id: leadId,
+      final_score: session.correct_answers || 0,
+      time_elapsed_seconds: timeElapsedSeconds,
     };
 
     const controller = new AbortController();
