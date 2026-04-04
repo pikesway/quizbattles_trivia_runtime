@@ -116,6 +116,7 @@ async function captureLeadOnPlatform(
     const payload = {
       event_type: 'lead_capture',
       campaign_id: session.campaign_id,
+      instance_id: session.campaign_game_instance_id,
       first_name: firstName,
       last_name: lastName,
       email: leadData.email || '',
