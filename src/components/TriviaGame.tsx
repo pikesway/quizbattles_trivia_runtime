@@ -200,17 +200,8 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
       const response = data.data as SubmitAnswerResponse;
       setFeedback(response);
 
-      // Always show feedback screen when configured
-      if (shellData?.config?.screens?.feedback?.show_explanation) {
-        setGameState('answered');
-        setLoading(false);
-      } else {
-        // Auto-advance after brief delay only if feedback screen is disabled
-        setTimeout(() => {
-          setLoading(false);
-          moveToNext();
-        }, 500);
-      }
+      setGameState('answered');
+      setLoading(false);
     } catch (err) {
       setError((err as Error).message);
       setLoading(false);
@@ -314,17 +305,8 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
       setFeedback(response);
       setLastAnswerCorrect(response.correct);
 
-      // Always show feedback screen when configured
-      if (shellData?.config?.screens?.feedback?.show_explanation) {
-        setGameState('answered');
-        setLoading(false);
-      } else {
-        // Auto-advance after brief delay only if feedback screen is disabled
-        setTimeout(() => {
-          setLoading(false);
-          moveToNext();
-        }, 500);
-      }
+      setGameState('answered');
+      setLoading(false);
     } catch (err) {
       setError((err as Error).message);
       setLoading(false);
@@ -1027,9 +1009,9 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
               >
                 {lastAnswerCorrect
                   ? (screens?.feedback?.correct_headline || 'Correct!')
-                  : (screens?.feedback?.incorrect_headline || 'Incorrect')}
+                  : (screens?.feedback?.incorrect_headline || 'Not quite!')}
               </h2>
-              {screens?.feedback?.show_explanation && feedback.explanation && (
+              {feedback.explanation && (
                 <p
                   className="text-sm sm:text-base mb-6 max-w-sm"
                   style={{ color: theme?.secondary_text_color }}
