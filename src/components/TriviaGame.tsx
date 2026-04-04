@@ -439,15 +439,25 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('trivia-lead', {
-        body: {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/trivia-lead`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${anonKey}`,
+          'apikey': anonKey
+        },
+        body: JSON.stringify({
           session_id: sessionId,
           data: leadFormData,
           terms_accepted: termsAccepted,
-        },
+        })
       });
 
-      if (error) throw error;
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error?.message || 'Failed to connect to server');
 
       if (!data.success) {
         if (data.error?.details) {
