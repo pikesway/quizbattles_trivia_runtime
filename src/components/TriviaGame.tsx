@@ -255,10 +255,6 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
       setTotalQuestions(response.total_questions);
       setCurrentQuestionNum(response.current_question);
 
-      if (response.shell) {
-        setShellData(response.shell);
-      }
-
       // Set timer configuration
       if (response.timer) {
         setTimerMode(response.timer.mode);
