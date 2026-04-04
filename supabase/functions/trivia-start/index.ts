@@ -130,7 +130,7 @@ Deno.serve(async (req: Request) => {
     // Extract shell properties
     const topic = shell.topic;
     const tags = shell.tags || [];
-    const question_count = shell.default_question_count || 10;
+    const question_count = instanceOverrides.question_count || shell.default_question_count || 10;
 
     // STEP 2: Query questions using Option C (PostgreSQL OR Query)
     let questionsQuery = supabase
