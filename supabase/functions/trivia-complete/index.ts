@@ -92,13 +92,12 @@ function resolveShareText(
     .replace(/\{quiz_name\}/g, quizName);
 }
 
-async function sendGameCompleteWebhook(session: Record<string, unknown>): Promise<void> {
+async function sendGameCompleteWebhook(session: Record<string, unknown>): Promise<any> {
   const webhookUrl = Deno.env.get('PLATFORM_WEBHOOK_URL');
   const webhookSecret = Deno.env.get('PLATFORM_WEBHOOK_SECRET');
 
   if (!webhookUrl || !webhookSecret) {
-    console.log('Platform webhook not configured, skipping game complete notification');
-    return;
+    return { status: 'skipped', reason: 'Platform webhook missing ENV variables' };
   }
 
   try {
@@ -118,6 +117,10 @@ async function sendGameCompleteWebhook(session: Record<string, unknown>): Promis
       time_elapsed_seconds: timeElapsedSeconds,
     };
 
+    if (!leadId) {
+      return { status: 'skipped', reason: 'lead_id is null', payload };
+    }
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
@@ -134,16 +137,15 @@ async function sendGameCompleteWebhook(session: Record<string, unknown>): Promis
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.error('Platform webhook failed:', response.status, await response.text());
-    } else {
-      console.log('Game complete webhook sent successfully');
+      const errText = await response.text();
+      return { status: 'failed', code: response.status, platform_response: errText, payload };
     }
+
+    const successData = await response.json();
+    return { status: 'success', platform_response: successData, payload };
+
   } catch (error) {
-    if ((error as Error).name === 'AbortError') {
-      console.error('Platform webhook timeout after 5 seconds');
-    } else {
-      console.error('Error calling platform webhook:', error);
-    }
+    return { status: 'error', reason: (error as Error).message };
   }
 }
 
@@ -260,10 +262,10 @@ Deno.serve(async (req: Request) => {
     session.status = 'completed';
     session.completed_at = new Date().toISOString();
 
-    await sendGameCompleteWebhook(session);
+    const webhookDebug = await sendGameCompleteWebhook(session);
 
     return new Response(
-      JSON.stringify({ success: true, data: responseData }),
+      JSON.stringify({ success: true, data: { ...responseData, debug_webhook: webhookDebug } }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
