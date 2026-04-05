@@ -366,7 +366,7 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/trivia-complete`, {
+      const completionResponse = await fetch(`${supabaseUrl}/functions/v1/trivia-complete`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -376,16 +376,16 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
         body: JSON.stringify({ session_id: sessionId })
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error?.message || 'Failed to complete game');
+      const data = await completionResponse.json();
+      if (!completionResponse.ok) throw new Error(data.error?.message || 'Failed to complete game');
 
       if (!data.success) {
         setError(data.error || 'Failed to complete game');
         return;
       }
 
-      const completionResponse = data.data as CompleteSessionResponse;
-      setCompletionData(completionResponse);
+      const completionResult = data.data as CompleteSessionResponse;
+      setCompletionData(completionResult);
       setGameState('completed');
     } catch (err) {
       setError((err as Error).message);
