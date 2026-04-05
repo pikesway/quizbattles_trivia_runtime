@@ -260,7 +260,7 @@ Deno.serve(async (req: Request) => {
     session.status = 'completed';
     session.completed_at = new Date().toISOString();
 
-    EdgeRuntime.waitUntil(sendGameCompleteWebhook(session));
+    await sendGameCompleteWebhook(session);
 
     return new Response(
       JSON.stringify({ success: true, data: responseData }),
