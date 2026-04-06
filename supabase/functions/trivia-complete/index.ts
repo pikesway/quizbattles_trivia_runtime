@@ -159,7 +159,7 @@ Deno.serve(async (req: Request) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { session_id } = await req.json();
+    const { session_id, metadata: requestMetadata } = await req.json();
 
     if (!session_id) {
       return new Response(
@@ -250,11 +250,17 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const updatedMetadata = { ...(session.metadata || {}) };
+    if (requestMetadata?.device_id) {
+      updatedMetadata.device_id = requestMetadata.device_id;
+    }
+
     const { error: updateError } = await supabase
       .from('trivia_game_sessions')
       .update({
         status: 'completed',
         completed_at: new Date().toISOString(),
+        metadata: updatedMetadata,
       })
       .eq('id', session_id);
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Share2, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { getOrCreateDeviceId } from '../lib/deviceId';
 import { GameStage, StageHeader, StageBody, StageFooter } from './runtime/GameStage';
 import {
   StartSessionResponse,
@@ -137,9 +138,13 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [leadFormErrors, setLeadFormErrors] = useState<Record<string, string>>({});
   const [configLoadFailed, setConfigLoadFailed] = useState(false);
+  const [deviceId, setDeviceId] = useState<string>('');
 
-  // Pre-load shell data on mount for start screen background
+  // Pre-load shell data and deviceId on mount
   useEffect(() => {
+    const id = getOrCreateDeviceId();
+    setDeviceId(id);
+
     async function loadShellData() {
       if (!template_id) {
         setValidationError('Invalid or missing game link.');
@@ -373,7 +378,12 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
           'Authorization': `Bearer ${anonKey}`,
           'apikey': anonKey
         },
-        body: JSON.stringify({ session_id: sessionId })
+        body: JSON.stringify({
+          session_id: sessionId,
+          metadata: {
+            device_id: deviceId,
+          }
+        })
       });
 
       const data = await completionResponse.json();
@@ -461,7 +471,10 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
         },
         body: JSON.stringify({
           session_id: sessionId,
-          data: leadFormData,
+          data: {
+            ...leadFormData,
+            device_id: deviceId,
+          },
           terms_accepted: termsAccepted,
         })
       });

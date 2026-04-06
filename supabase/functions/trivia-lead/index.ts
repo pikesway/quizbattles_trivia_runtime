@@ -253,6 +253,9 @@ Deno.serve(async (req: Request) => {
     if (leadId) {
       const metadata = session.metadata || {};
       metadata.platform_lead_id = leadId;
+      if (data.device_id) {
+        metadata.device_id = data.device_id;
+      }
 
       const { error: updateError } = await supabase
         .from('trivia_game_sessions')
@@ -264,6 +267,20 @@ Deno.serve(async (req: Request) => {
 
       if (updateError) {
         console.error('Failed to update session with lead_id:', updateError);
+      }
+    } else {
+      const metadata = session.metadata || {};
+      if (data.device_id) {
+        metadata.device_id = data.device_id;
+
+        const { error: updateError } = await supabase
+          .from('trivia_game_sessions')
+          .update({ metadata })
+          .eq('id', session_id);
+
+        if (updateError) {
+          console.error('Failed to update session with device_id:', updateError);
+        }
       }
     }
 
