@@ -573,7 +573,20 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
 
   function handleViewLeaderboard() {
     if (return_url) {
-      window.location.href = return_url;
+      let finalUrl = return_url;
+
+      if (deviceId) {
+        try {
+          const url = new URL(return_url);
+          url.searchParams.set('device_id', deviceId);
+          finalUrl = url.toString();
+        } catch {
+          const separator = return_url.includes('?') ? '&' : '?';
+          finalUrl = `${return_url}${separator}device_id=${encodeURIComponent(deviceId)}`;
+        }
+      }
+
+      window.location.href = finalUrl;
     }
   }
 
