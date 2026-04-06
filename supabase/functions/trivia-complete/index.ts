@@ -233,6 +233,7 @@ Deno.serve(async (req: Request) => {
     };
 
     if (session.status === 'completed') {
+      await sendGameCompleteWebhook(session);
       return new Response(
         JSON.stringify({ success: true, data: responseData }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
