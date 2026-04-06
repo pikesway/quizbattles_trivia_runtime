@@ -107,11 +107,13 @@ async function sendGameCompleteWebhook(session: Record<string, unknown>): Promis
 
     const metadata = (session.metadata as Record<string, unknown>) || {};
     const leadId = metadata.platform_lead_id || session.lead_id || null;
+    const deviceId = metadata.device_id || null;
 
     const payload = {
       event_type: 'game_complete',
       campaign_id: session.campaign_id,
       instance_id: session.campaign_game_instance_id || null,
+      device_id: deviceId,
       lead_id: leadId,
       final_score: session.correct_answers || 0,
       time_elapsed_seconds: timeElapsedSeconds,
