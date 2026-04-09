@@ -41,7 +41,7 @@ function getSpacingConfig(spacing: GameScreenSpacing = 'comfortable', customValu
 }
 
 type GameState = 'start' | 'playing' | 'answered' | 'lead_form' | 'completed';
-type AccessBlockReason = 'draft' | 'not_started' | 'ended' | null;
+type AccessBlockReason = 'draft' | 'not_started' | 'ended' | 'unavailable' | null;
 
 interface TriviaGameProps {
   campaign_id?: string;
@@ -179,18 +179,21 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url, 
           } | null;
 
           if (gate) {
-            const now = new Date();
-            if (gate.status === 'draft') {
-              setAccessBlockReason('draft');
+            if (gate.status === null) {
+              // standalone/preview bypass — skip all gate checks
+            } else if (gate.status !== 'active') {
+              setAccessBlockReason(gate.status === 'draft' ? 'draft' : 'unavailable');
               return;
-            }
-            if (gate.start_time && now < new Date(gate.start_time)) {
-              setAccessBlockReason('not_started');
-              return;
-            }
-            if (gate.end_time && now > new Date(gate.end_time)) {
-              setAccessBlockReason('ended');
-              return;
+            } else {
+              const now = new Date();
+              if (gate.start_time && now < new Date(gate.start_time)) {
+                setAccessBlockReason('not_started');
+                return;
+              }
+              if (gate.end_time && now > new Date(gate.end_time)) {
+                setAccessBlockReason('ended');
+                return;
+              }
             }
           }
 
@@ -650,6 +653,10 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url, 
       draft: {
         heading: 'Game Not Available',
         body: 'This game is not currently active.',
+      },
+      unavailable: {
+        heading: 'Check Back Later',
+        body: 'This game is not available right now.',
       },
       not_started: {
         heading: 'Game Not Available',

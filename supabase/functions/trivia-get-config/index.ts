@@ -126,6 +126,12 @@ Deno.serve(async (req: Request) => {
           start_time: override.start_time ?? null,
           end_time: override.end_time ?? null,
         };
+      } else {
+        instanceGate = {
+          status: 'not_found',
+          start_time: null,
+          end_time: null,
+        };
       }
     }
 
