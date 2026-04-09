@@ -1,3 +1,4 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 
 const corsHeaders = {
@@ -6,125 +7,67 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-interface InstanceOverridePayload {
+const VALID_STATUSES = ["draft", "active", "paused", "ended"] as const;
+type InstanceStatus = typeof VALID_STATUSES[number];
+
+interface SyncPayload {
   instance_id: string;
   campaign_id: string;
-  settings: Record<string, unknown>;
+  status: InstanceStatus;
+  start_time: string | null;
+  end_time: string | null;
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 200,
-      headers: corsHeaders,
-    });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
     if (req.method !== "POST") {
       return new Response(
-        JSON.stringify({
-          success: false,
-          error: "Method not allowed. Use POST.",
-        }),
-        {
-          status: 200,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
+        JSON.stringify({ success: false, error: "Method not allowed. Use POST." }),
+        { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: "Server configuration error: Missing environment variables.",
-        }),
-        {
-          status: 200,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    let payload: InstanceOverridePayload;
-
+    let payload: SyncPayload;
     try {
       payload = await req.json();
     } catch {
       return new Response(
-        JSON.stringify({
-          success: false,
-          error: "Invalid JSON payload.",
-        }),
-        {
-          status: 200,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
+        JSON.stringify({ success: false, error: "Invalid JSON payload." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     if (!payload.instance_id || typeof payload.instance_id !== "string") {
       return new Response(
-        JSON.stringify({
-          success: false,
-          error: "Missing or invalid required field: instance_id (must be a string).",
-        }),
-        {
-          status: 200,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
+        JSON.stringify({ success: false, error: "Missing or invalid required field: instance_id." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     if (!payload.campaign_id || typeof payload.campaign_id !== "string") {
       return new Response(
-        JSON.stringify({
-          success: false,
-          error: "Missing or invalid required field: campaign_id (must be a string).",
-        }),
-        {
-          status: 200,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
+        JSON.stringify({ success: false, error: "Missing or invalid required field: campaign_id." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (!payload.settings || typeof payload.settings !== "object" || Array.isArray(payload.settings)) {
+    if (!payload.status || !VALID_STATUSES.includes(payload.status)) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: "Missing or invalid required field: settings (must be an object).",
+          error: `Missing or invalid field: status. Must be one of: ${VALID_STATUSES.join(", ")}.`,
         }),
-        {
-          status: 200,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { data, error } = await supabase
       .from("trivia_instance_overrides")
@@ -132,61 +75,38 @@ Deno.serve(async (req: Request) => {
         {
           instance_id: payload.instance_id,
           campaign_id: payload.campaign_id,
-          settings: payload.settings,
+          status: payload.status,
+          start_time: payload.start_time ?? null,
+          end_time: payload.end_time ?? null,
         },
         {
           onConflict: "instance_id",
+          ignoreDuplicates: false,
         }
       )
-      .select("instance_id, campaign_id, updated_at")
+      .select("instance_id, campaign_id, status, start_time, end_time, updated_at")
       .single();
 
     if (error) {
+      console.error("Upsert error:", error);
       return new Response(
-        JSON.stringify({
-          success: false,
-          error: `Database operation failed: ${error.message}`,
-        }),
-        {
-          status: 200,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
+        JSON.stringify({ success: false, error: `Database operation failed: ${error.message}` }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     return new Response(
-      JSON.stringify({
-        success: true,
-        data: {
-          instance_id: data.instance_id,
-          campaign_id: data.campaign_id,
-          updated_at: data.updated_at,
-        },
-      }),
-      {
-        status: 200,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
-      }
+      JSON.stringify({ success: true, data }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
+  } catch (err) {
+    console.error("Unexpected error in sync-instance-override:", err);
     return new Response(
       JSON.stringify({
         success: false,
-        error: `Unexpected error: ${error instanceof Error ? error.message : "Unknown error"}`,
+        error: err instanceof Error ? err.message : "Internal server error",
       }),
-      {
-        status: 200,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
-      }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
