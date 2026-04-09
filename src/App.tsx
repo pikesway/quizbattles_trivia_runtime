@@ -41,6 +41,7 @@ function getInitialView(): { view: ViewType; testToken?: string } {
 
 function App() {
   const [viewState, setViewState] = useState<{ view: ViewType; testToken?: string }>(getInitialView);
+  const [gameStarted, setGameStarted] = useState(false);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -85,19 +86,22 @@ function App() {
 
   return (
     <div>
-      <div className="fixed top-4 right-4 z-50">
-        <button
-          onClick={() => navigate('admin')}
-          className="px-3 py-1.5 text-xs bg-gray-800 text-white rounded-lg hover:bg-gray-700"
-        >
-          Admin
-        </button>
-      </div>
+      {!gameStarted && (
+        <div className="fixed top-4 right-4 z-50">
+          <button
+            onClick={() => navigate('admin')}
+            className="px-3 py-1.5 text-xs bg-gray-800 text-white rounded-lg hover:bg-gray-700"
+          >
+            Admin
+          </button>
+        </div>
+      )}
       <TriviaGame
         campaign_id={platformParams.campaign_id}
         template_id={platformParams.template_id}
         instance_id={platformParams.instance_id}
         return_url={platformParams.return_url}
+        onGameStateChange={(state) => setGameStarted(state !== 'start')}
       />
     </div>
   );

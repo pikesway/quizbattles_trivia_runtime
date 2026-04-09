@@ -47,6 +47,7 @@ interface TriviaGameProps {
   template_id?: string;
   instance_id?: string;
   return_url?: string;
+  onGameStateChange?: (state: GameState) => void;
 }
 
 interface LeadFormField {
@@ -115,8 +116,13 @@ interface ShellData {
   };
 }
 
-export function TriviaGame({ campaign_id, template_id, instance_id, return_url }: TriviaGameProps) {
+export function TriviaGame({ campaign_id, template_id, instance_id, return_url, onGameStateChange }: TriviaGameProps) {
   const [gameState, setGameState] = useState<GameState>('start');
+
+  function updateGameState(state: GameState) {
+    setGameState(state);
+    onGameStateChange?.(state);
+  }
   const [sessionId, setSessionId] = useState<string>('');
   const [currentQuestion, setCurrentQuestion] = useState<any>(null);
   const [selectedAnswer, setSelectedAnswer] = useState<string>('');
@@ -205,7 +211,7 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
       const response = data.data as SubmitAnswerResponse;
       setFeedback(response);
 
-      setGameState('answered');
+      updateGameState('answered');
       setLoading(false);
     } catch (err) {
       setError((err as Error).message);
@@ -268,7 +274,7 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
         setTimerActive(response.timer.mode !== 'none');
       }
 
-      setGameState('playing');
+      updateGameState('playing');
     } catch (err) {
       setError(`Connection error: ${(err as Error).message}`);
     } finally {
@@ -306,7 +312,7 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
       setFeedback(response);
       setLastAnswerCorrect(response.correct);
 
-      setGameState('answered');
+      updateGameState('answered');
       setLoading(false);
     } catch (err) {
       setError((err as Error).message);
@@ -322,7 +328,7 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
 
       if (leadConfig && hasEnabledFields) {
         // Transition to lead form before completing
-        setGameState('lead_form');
+        updateGameState('lead_form');
         setLoading(false);
         return;
       }
@@ -355,7 +361,7 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
       setLastAnswerCorrect(null);
       setTimeRemaining(timerSeconds);
       setTimerActive(timerMode !== 'none');
-      setGameState('playing');
+      updateGameState('playing');
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -396,7 +402,7 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
 
       const completionResult = data.data as CompleteSessionResponse;
       setCompletionData(completionResult);
-      setGameState('completed');
+      updateGameState('completed');
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -507,7 +513,7 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url }
   }
 
   function resetGame() {
-    setGameState('start');
+    updateGameState('start');
     setSessionId('');
     setCurrentQuestion(null);
     setSelectedAnswer('');
