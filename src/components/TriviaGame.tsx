@@ -41,6 +41,7 @@ function getSpacingConfig(spacing: GameScreenSpacing = 'comfortable', customValu
 }
 
 type GameState = 'start' | 'playing' | 'answered' | 'lead_form' | 'completed';
+type AccessBlockReason = 'draft' | 'not_started' | 'ended' | null;
 
 interface TriviaGameProps {
   campaign_id?: string;
@@ -144,6 +145,7 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url, 
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [leadFormErrors, setLeadFormErrors] = useState<Record<string, string>>({});
   const [configLoadFailed, setConfigLoadFailed] = useState(false);
+  const [accessBlockReason, setAccessBlockReason] = useState<AccessBlockReason>(null);
   const [deviceId, setDeviceId] = useState<string>('');
 
   // Pre-load shell data and deviceId on mount
@@ -169,7 +171,30 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url, 
         if (error) throw error;
 
         if (data?.success) {
-          setShellData(data.data as ShellData);
+          const responseData = data.data;
+          const gate = responseData.instance as {
+            status: string | null;
+            start_time: string | null;
+            end_time: string | null;
+          } | null;
+
+          if (gate) {
+            const now = new Date();
+            if (gate.status === 'draft') {
+              setAccessBlockReason('draft');
+              return;
+            }
+            if (gate.start_time && now < new Date(gate.start_time)) {
+              setAccessBlockReason('not_started');
+              return;
+            }
+            if (gate.end_time && now > new Date(gate.end_time)) {
+              setAccessBlockReason('ended');
+              return;
+            }
+          }
+
+          setShellData(responseData as ShellData);
         } else {
           console.error('Failed to load config:', data?.error);
           setConfigLoadFailed(true);
@@ -619,6 +644,40 @@ export function TriviaGame({ campaign_id, template_id, instance_id, return_url, 
   const retryLoadConfig = () => {
     window.location.reload();
   };
+
+  if (accessBlockReason) {
+    const messages: Record<NonNullable<AccessBlockReason>, { heading: string; body: string }> = {
+      draft: {
+        heading: 'Game Not Available',
+        body: 'This game is not currently active.',
+      },
+      not_started: {
+        heading: 'Game Not Available',
+        body: "This game hasn't started yet. Check back later!",
+      },
+      ended: {
+        heading: 'Game Not Available',
+        body: 'This game has concluded. Thanks for playing!',
+      },
+    };
+    const { heading, body } = messages[accessBlockReason];
+    return (
+      <GameStage backgroundImage="#1a1a1a" overlayColor="rgba(0,0,0,0.5)">
+        <div className="flex flex-col h-full" style={{ fontFamily: 'Inter, sans-serif' }}>
+          <StageBody className="flex flex-col items-center justify-center px-6">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-sm text-center">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-3">
+                {heading}
+              </h1>
+              <p className="text-gray-600 text-sm sm:text-base">
+                {body}
+              </p>
+            </div>
+          </StageBody>
+        </div>
+      </GameStage>
+    );
+  }
 
   if (configLoadFailed) {
     return (

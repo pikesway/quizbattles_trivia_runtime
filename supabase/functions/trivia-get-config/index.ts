@@ -15,26 +15,20 @@ function deepMerge<T extends Record<string, any>>(target: T, source: Partial<T>)
       const sourceValue = source[key];
       const targetValue = result[key];
 
-      // If source value is null or undefined, skip it
       if (sourceValue === null || sourceValue === undefined) {
         continue;
       }
 
-      // If source value is an array, completely replace the target array
       if (Array.isArray(sourceValue)) {
         result[key] = sourceValue as any;
-      }
-      // If both values are plain objects, recursively merge them
-      else if (
+      } else if (
         typeof sourceValue === 'object' &&
         typeof targetValue === 'object' &&
         !Array.isArray(targetValue) &&
         targetValue !== null
       ) {
         result[key] = deepMerge(targetValue, sourceValue) as any;
-      }
-      // Otherwise, directly assign the source value
-      else {
+      } else {
         result[key] = sourceValue as any;
       }
     }
@@ -44,7 +38,6 @@ function deepMerge<T extends Record<string, any>>(target: T, source: Partial<T>)
 }
 
 Deno.serve(async (req: Request) => {
-  // CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -69,7 +62,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Fetch shell from trivia_shells
     const { data: shell, error: shellError } = await supabase
       .from('trivia_shells')
       .select('internal_name, topic, config')
@@ -104,21 +96,36 @@ Deno.serve(async (req: Request) => {
     }
 
     let finalConfig = shell.config || {};
+    let instanceGate: {
+      status: string | null;
+      start_time: string | null;
+      end_time: string | null;
+    } = {
+      status: null,
+      start_time: null,
+      end_time: null,
+    };
 
-    // If instance_id is provided and not 'standalone-instance', fetch overrides
-    if (instance_id && instance_id !== 'standalone-instance') {
+    const isStandalone = !instance_id || instance_id === 'standalone-instance';
+
+    if (!isStandalone) {
       const { data: override, error: overrideError } = await supabase
         .from('trivia_instance_overrides')
-        .select('settings')
+        .select('settings, status, start_time, end_time')
         .eq('instance_id', instance_id)
         .maybeSingle();
 
       if (overrideError) {
         console.error('Error fetching instance override:', overrideError);
-        // Continue with shell defaults if override fetch fails
-      } else if (override?.settings) {
-        // Merge override settings into shell config
-        finalConfig = deepMerge(finalConfig, override.settings);
+      } else if (override) {
+        if (override.settings) {
+          finalConfig = deepMerge(finalConfig, override.settings);
+        }
+        instanceGate = {
+          status: override.status ?? 'active',
+          start_time: override.start_time ?? null,
+          end_time: override.end_time ?? null,
+        };
       }
     }
 
@@ -129,6 +136,7 @@ Deno.serve(async (req: Request) => {
           internal_name: shell.internal_name,
           topic: shell.topic,
           config: finalConfig,
+          instance: instanceGate,
         },
       }),
       {
